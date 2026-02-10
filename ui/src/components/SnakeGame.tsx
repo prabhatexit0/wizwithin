@@ -18,9 +18,8 @@ export default function SnakeGame() {
 
     async function boot() {
       try {
-        // Dynamic import so Vite can resolve the WASM alias at bundle time
         const wasm = await import("@snake_engine");
-        await wasm.default(); // init() – instantiates the .wasm
+        await wasm.default();
         if (cancelled) return;
 
         wasm.start_snake("snake-canvas", GRID_COLS, GRID_ROWS);
@@ -41,7 +40,7 @@ export default function SnakeGame() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center gap-3 w-full">
       {status === "loading" && (
         <p className="text-zinc-400 text-sm animate-pulse">
           Loading WASM module...
@@ -56,12 +55,17 @@ export default function SnakeGame() {
         id="snake-canvas"
         width={CANVAS_W}
         height={CANVAS_H}
-        className="rounded-lg border border-zinc-700 bg-zinc-900"
+        className="rounded-lg border border-zinc-700 bg-zinc-900 touch-none w-full max-w-[400px] aspect-square"
       />
 
       {status === "running" && (
-        <div className="text-zinc-500 text-xs text-center space-y-1">
-          <p>Arrow keys or WASD to move &middot; R to restart</p>
+        <div className="text-zinc-500 text-xs text-center space-y-1 px-2">
+          <p className="hidden sm:block">
+            Arrow keys or WASD to move &middot; R to restart
+          </p>
+          <p className="sm:hidden">
+            Swipe to move &middot; Tap to restart when game over
+          </p>
         </div>
       )}
     </div>

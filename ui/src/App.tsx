@@ -6,8 +6,8 @@ export default function App() {
     <div className="min-h-screen bg-zinc-900 text-zinc-100">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-900/80 backdrop-blur">
-        <div className="mx-auto max-w-5xl px-4 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold tracking-tight">
+        <div className="mx-auto max-w-5xl px-3 sm:px-4 py-3 sm:py-4 flex items-center justify-between">
+          <h1 className="text-lg sm:text-xl font-bold tracking-tight">
             wiz<span className="text-emerald-400">within</span>
           </h1>
           <span className="text-xs text-zinc-500">
@@ -17,7 +17,7 @@ export default function App() {
       </header>
 
       {/* Scrollable dashboard */}
-      <main className="mx-auto max-w-5xl px-4 py-8 space-y-6">
+      <main className="mx-auto max-w-5xl px-3 sm:px-4 py-4 sm:py-8 space-y-4 sm:space-y-6">
         <ToolCard
           title="Snake"
           description="Classic snake game — logic & rendering powered by Rust/WebGL."

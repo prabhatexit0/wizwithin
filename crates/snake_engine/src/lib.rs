@@ -3,7 +3,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use wasm_bindgen::prelude::*;
 use web_sys::{
-    HtmlCanvasElement, KeyboardEvent, WebGlBuffer, WebGlProgram, WebGlRenderingContext as GL,
+    HtmlCanvasElement, KeyboardEvent, TouchEvent, WebGlBuffer, WebGlProgram,
+    WebGlRenderingContext as GL,
 };
 
 // ---------------------------------------------------------------------------
@@ -395,6 +396,86 @@ pub fn start_snake(canvas_id: &str, grid_cols: i32, grid_rows: i32) -> Result<()
         window()
             .add_event_listener_with_callback("keydown", closure.as_ref().unchecked_ref())?;
         closure.forget(); // leak – lives for the page lifetime
+    }
+
+    // Touch / swipe input (mobile) -----------------------------------------
+    {
+        let touch_start: Rc<RefCell<Option<(f64, f64)>>> = Rc::new(RefCell::new(None));
+
+        // touchstart – record the starting point
+        {
+            let touch_start = Rc::clone(&touch_start);
+            let closure =
+                Closure::<dyn FnMut(TouchEvent)>::new(move |e: TouchEvent| {
+                    if let Some(touch) = e.touches().get(0) {
+                        *touch_start.borrow_mut() =
+                            Some((touch.client_x() as f64, touch.client_y() as f64));
+                    }
+                });
+            canvas
+                .add_event_listener_with_callback("touchstart", closure.as_ref().unchecked_ref())?;
+            closure.forget();
+        }
+
+        // touchend – compute swipe direction
+        {
+            let touch_start = Rc::clone(&touch_start);
+            let state = Rc::clone(&state);
+            let closure =
+                Closure::<dyn FnMut(TouchEvent)>::new(move |e: TouchEvent| {
+                    e.prevent_default(); // prevent scroll / zoom
+                    let start = *touch_start.borrow();
+                    if let Some((sx, sy)) = start {
+                        if let Some(touch) = e.changed_touches().get(0) {
+                            let dx = touch.client_x() as f64 - sx;
+                            let dy = touch.client_y() as f64 - sy;
+                            let min_swipe = 20.0; // minimum px to count as a swipe
+
+                            if dx.abs() > min_swipe || dy.abs() > min_swipe {
+                                let mut s = state.borrow_mut();
+                                if dx.abs() > dy.abs() {
+                                    // horizontal swipe
+                                    if dx > 0.0 {
+                                        s.set_direction(Direction::Right);
+                                    } else {
+                                        s.set_direction(Direction::Left);
+                                    }
+                                } else {
+                                    // vertical swipe
+                                    if dy > 0.0 {
+                                        s.set_direction(Direction::Down);
+                                    } else {
+                                        s.set_direction(Direction::Up);
+                                    }
+                                }
+                            } else {
+                                // Tap (no significant swipe) – reset if game over
+                                let s = state.borrow();
+                                if s.game_over {
+                                    drop(s);
+                                    let mut s = state.borrow_mut();
+                                    *s = GameState::new(s.grid_w, s.grid_h);
+                                }
+                            }
+                        }
+                    }
+                    *touch_start.borrow_mut() = None;
+                });
+            canvas
+                .add_event_listener_with_callback("touchend", closure.as_ref().unchecked_ref())?;
+            closure.forget();
+        }
+
+        // touchmove – prevent scrolling while swiping on the canvas
+        {
+            let closure =
+                Closure::<dyn FnMut(TouchEvent)>::new(move |e: TouchEvent| {
+                    e.prevent_default();
+                });
+            canvas
+                .add_event_listener_with_callback("touchmove", closure.as_ref().unchecked_ref())?;
+            closure.forget();
+        }
     }
 
     // Game loop (tick at ~8 fps, render at display rate) --------------------
