@@ -1,0 +1,13 @@
+[build]
+  command = "curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh && npm run build"
+  publish = "ui/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  RUSTUP_HOME = "/opt/buildhome/.rustup"
+  CARGO_HOME = "/opt/buildhome/.cargo"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
