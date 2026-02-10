@@ -27,6 +27,9 @@ features = [
     "WebGlShader",
     "WebGlUniformLocation",
     "KeyboardEvent",
+    "TouchEvent",
+    "Touch",
+    "TouchList",
     "EventTarget",
     "console",
 ]
