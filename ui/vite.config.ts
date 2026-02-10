@@ -13,12 +13,16 @@ export default defineConfig({
         __dirname,
         "../crates/snake_engine/pkg",
       ),
+      "@sand_engine": path.resolve(
+        __dirname,
+        "../crates/sand_engine/pkg",
+      ),
     },
   },
   build: {
     target: "esnext",
   },
   optimizeDeps: {
-    exclude: ["@snake_engine"],
+    exclude: ["@snake_engine", "@sand_engine"],
   },
 });

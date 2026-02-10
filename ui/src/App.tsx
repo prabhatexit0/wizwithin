@@ -1,4 +1,5 @@
 import SnakeGame from "./components/SnakeGame";
+import SandBox from "./components/SandBox";
 import ToolCard from "./components/ToolCard";
 
 export default function App() {
@@ -23,6 +24,13 @@ export default function App() {
           description="Classic snake game — logic & rendering powered by Rust/WebGL."
         >
           <SnakeGame />
+        </ToolCard>
+
+        <ToolCard
+          title="Elemental SandBox"
+          description="Falling sand cellular automata — shared-memory rendering from Rust to Canvas."
+        >
+          <SandBox />
         </ToolCard>
 
         {/* Placeholder for future tools */}

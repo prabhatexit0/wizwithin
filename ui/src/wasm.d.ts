@@ -6,3 +6,24 @@ declare module "@snake_engine" {
     grid_rows: number,
   ): void;
 }
+
+declare module "@sand_engine" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class Universe {
+    constructor(width: number, height: number);
+    free(): void;
+    width(): number;
+    height(): number;
+    pixels_ptr(): number;
+    pixels_len(): number;
+    paint(cx: number, cy: number, cell_type: number, radius: number): void;
+    tick(): void;
+    render(): void;
+    clear(): void;
+  }
+}
