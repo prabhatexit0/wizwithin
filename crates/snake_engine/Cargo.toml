@@ -1,0 +1,36 @@
+[package]
+name = "snake_engine"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+getrandom = { version = "0.3", features = ["wasm_js"] }
+rand = "0.9"
+
+[dependencies.web-sys]
+version = "0.3"
+features = [
+    "Window",
+    "Document",
+    "HtmlCanvasElement",
+    "WebGlRenderingContext",
+    "WebGlBuffer",
+    "WebGlProgram",
+    "WebGlShader",
+    "WebGlUniformLocation",
+    "KeyboardEvent",
+    "EventTarget",
+    "console",
+]
+
+[profile.release]
+opt-level = "s"
+lto = true

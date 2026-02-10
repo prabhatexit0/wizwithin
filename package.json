@@ -1,0 +1,12 @@
+{
+  "name": "wizwithin",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Rust + WASM micro-tools playground",
+  "scripts": {
+    "wasm:build": "wasm-pack build crates/snake_engine --target web --out-dir pkg",
+    "dev": "npm run wasm:build && npm run --prefix ui dev",
+    "build": "npm run wasm:build && npm run --prefix ui build",
+    "preview": "npm run --prefix ui preview"
+  }
+}
