@@ -38,9 +38,9 @@ export default function FractalExplorer() {
   const paletteRef = useRef(palette);
   paletteRef.current = palette;
 
-  // Drag state
-  const draggingRef = useRef(false);
-  const lastPosRef = useRef({ x: 0, y: 0 });
+  // Multi-pointer state (supports 1-finger pan + 2-finger pinch-to-zoom)
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchDistRef = useRef(0);
 
   // -----------------------------------------------------------------------
   // Palette change → mark dirty + push to Rust
@@ -159,32 +159,68 @@ export default function FractalExplorer() {
   }, [updateCoords]);
 
   // -----------------------------------------------------------------------
-  // Pointer (mouse/touch) handlers — pan via drag
+  // Pointer (mouse/touch) handlers — 1-finger pan + 2-finger pinch-to-zoom
   // -----------------------------------------------------------------------
   const onPointerDown = useCallback((e: React.PointerEvent) => {
-    draggingRef.current = true;
-    lastPosRef.current = { x: e.clientX, y: e.clientY };
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const ptrs = pointersRef.current;
+    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // When a second finger lands, record initial pinch distance
+    if (ptrs.size === 2) {
+      const [a, b] = [...ptrs.values()];
+      pinchDistRef.current = Math.hypot(b.x - a.x, b.y - a.y);
+    }
   }, []);
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
-      if (!draggingRef.current || !fractalRef.current) return;
-      const dx = e.clientX - lastPosRef.current.x;
-      const dy = e.clientY - lastPosRef.current.y;
-      lastPosRef.current = { x: e.clientX, y: e.clientY };
+      const ptrs = pointersRef.current;
+      const prev = ptrs.get(e.pointerId);
+      if (!prev || !fractalRef.current) return;
 
-      // Convert CSS pixels to device pixels for the Rust side
       const dpr = window.devicePixelRatio || 1;
-      fractalRef.current.pan(dx * dpr, dy * dpr);
-      dirtyRef.current = true;
-      updateCoords();
+
+      if (ptrs.size === 1) {
+        // Single finger/mouse → pan
+        const dx = e.clientX - prev.x;
+        const dy = e.clientY - prev.y;
+        ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        fractalRef.current.pan(dx * dpr, dy * dpr);
+        dirtyRef.current = true;
+        updateCoords();
+      } else if (ptrs.size === 2) {
+        // Two fingers → pinch-to-zoom (centered on midpoint)
+        ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const [a, b] = [...ptrs.values()];
+        const newDist = Math.hypot(b.x - a.x, b.y - a.y);
+        const oldDist = pinchDistRef.current;
+
+        if (oldDist > 0 && newDist > 0) {
+          const factor = newDist / oldDist;
+          const canvas = canvasRef.current!;
+          const rect = canvas.getBoundingClientRect();
+          // Zoom toward the midpoint between the two fingers
+          const mx = ((a.x + b.x) / 2 - rect.left) * dpr;
+          const my = ((a.y + b.y) / 2 - rect.top) * dpr;
+          fractalRef.current.zoom(factor, mx, my);
+          dirtyRef.current = true;
+          updateCoords();
+        }
+
+        pinchDistRef.current = newDist;
+      }
     },
     [updateCoords],
   );
 
-  const onPointerUp = useCallback(() => {
-    draggingRef.current = false;
+  const onPointerUp = useCallback((e: React.PointerEvent) => {
+    pointersRef.current.delete(e.pointerId);
+    // If one finger remains after lifting, reset pinch state
+    if (pointersRef.current.size < 2) {
+      pinchDistRef.current = 0;
+    }
   }, []);
 
   // -----------------------------------------------------------------------
@@ -279,6 +315,7 @@ export default function FractalExplorer() {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
+        onPointerCancel={onPointerUp}
         onWheel={onWheel}
       />
 
@@ -290,8 +327,11 @@ export default function FractalExplorer() {
             {" "}&middot;{" "}
             Zoom: {zoomLevel >= 1000 ? `${(zoomLevel / 1000).toFixed(1)}k` : zoomLevel.toFixed(1)}x
           </p>
-          <p>
+          <p className="hidden sm:block">
             Drag to pan &middot; Scroll to zoom toward cursor
+          </p>
+          <p className="sm:hidden">
+            Drag to pan &middot; Pinch to zoom
           </p>
         </div>
       )}
