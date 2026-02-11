@@ -73,7 +73,7 @@ export default function Raycaster() {
         function frame(now: number) {
           if (cancelled) return;
 
-          const dt = (now - lastTime) / 1000;
+          const dt = Math.min((now - lastTime) / 1000, 0.1);
           lastTime = now;
 
           const keys = keysRef.current;
