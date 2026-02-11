@@ -8,7 +8,7 @@ const MAP_H: usize = 64;
 const MAP_SIZE: usize = MAP_W * MAP_H;
 
 // Minimap
-const MINIMAP_SCALE: usize = 3; // each map cell → 3×3 display pixels
+const MINIMAP_SCALE: usize = 2; // each map cell → 2×2 display pixels
 const MINIMAP_W: usize = MAP_W * MINIMAP_SCALE;
 const MINIMAP_H: usize = MAP_H * MINIMAP_SCALE;
 const MINIMAP_PAD: usize = 4; // pixels of padding from corner
@@ -507,29 +507,25 @@ impl World {
             }
         }
 
-        // ── Player dot (bright green, 3×3) ───────────────────────────────
+        // ── Player dot (bright green, 2×2) ───────────────────────────────
         let ppx = ox + (self.pos_x * MINIMAP_SCALE as f64) as usize;
         let ppy = oy + (self.pos_y * MINIMAP_SCALE as f64) as usize;
-        for dy in 0..3usize {
-            for dx in 0..3usize {
+        for dy in 0..2usize {
+            for dx in 0..2usize {
                 let px = ppx + dx;
                 let py = ppy + dy;
-                if px > 0 && py > 0 {
-                    let px = px - 1;
-                    let py = py - 1;
-                    if px < buf_w && py < self.height as usize {
-                        let p = (py * buf_w + px) * 4;
-                        self.pixels[p] = 0x00;
-                        self.pixels[p + 1] = 0xFF;
-                        self.pixels[p + 2] = 0x00;
-                        self.pixels[p + 3] = 0xFF;
-                    }
+                if px < buf_w && py < self.height as usize {
+                    let p = (py * buf_w + px) * 4;
+                    self.pixels[p] = 0x00;
+                    self.pixels[p + 1] = 0xFF;
+                    self.pixels[p + 2] = 0x00;
+                    self.pixels[p + 3] = 0xFF;
                 }
             }
         }
 
-        // ── Direction line (5 pixels along dir vector) ───────────────────
-        for i in 1..=6 {
+        // ── Direction line (4 pixels along dir vector) ───────────────────
+        for i in 1..=4 {
             let lx = ppx as f64 + self.dir_x * i as f64 * MINIMAP_SCALE as f64 * 0.6;
             let ly = ppy as f64 + self.dir_y * i as f64 * MINIMAP_SCALE as f64 * 0.6;
             let lx = lx as usize;
