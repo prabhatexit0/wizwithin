@@ -28,6 +28,33 @@ declare module "@sand_engine" {
   }
 }
 
+declare module "@boid_engine" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class Flock {
+    constructor(width: number, height: number, count: number);
+    free(): void;
+    boids_ptr(): number;
+    boids_count(): number;
+    predators_ptr(): number;
+    predators_count(): number;
+    food_ptr(): number;
+    food_count(): number;
+    set_separation(w: number): void;
+    set_alignment(w: number): void;
+    set_cohesion(w: number): void;
+    set_count(count: number): void;
+    spawn_food(x: number, y: number): void;
+    clear_food(): void;
+    spawn_predator(): void;
+    tick(): void;
+  }
+}
+
 declare module "@fractal_engine" {
   interface InitOutput {
     readonly memory: WebAssembly.Memory;

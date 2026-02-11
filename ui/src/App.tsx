@@ -1,6 +1,7 @@
 import SnakeGame from "./components/SnakeGame";
 import SandBox from "./components/SandBox";
 import FractalExplorer from "./components/FractalExplorer";
+import FlockSim from "./components/FlockSim";
 import ToolCard from "./components/ToolCard";
 
 export default function App() {
@@ -39,6 +40,13 @@ export default function App() {
           description="Mandelbrot set — f64 escape-time computed in Rust/WASM with smooth pan & zoom."
         >
           <FractalExplorer />
+        </ToolCard>
+
+        <ToolCard
+          title="Flocking Simulation"
+          description="Boids algorithm — separation, alignment &amp; cohesion computed in Rust/WASM, rendered via Canvas 2D."
+        >
+          <FlockSim />
         </ToolCard>
 
         {/* Placeholder for future tools */}
