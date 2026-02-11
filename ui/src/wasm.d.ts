@@ -79,6 +79,28 @@ declare module "@chip8_core" {
   }
 }
 
+declare module "@synth_engine" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class Synth {
+    constructor(sample_rate: number, buffer_size: number);
+    free(): void;
+    set_frequency(freq: number): void;
+    set_gain(gain: number): void;
+    set_waveform(waveform: number): void;
+    frequency(): number;
+    gain(): number;
+    waveform(): number;
+    fill_buffer(): void;
+    buffer_ptr(): number;
+    buffer_len(): number;
+  }
+}
+
 declare module "@fractal_engine" {
   interface InitOutput {
     readonly memory: WebAssembly.Memory;

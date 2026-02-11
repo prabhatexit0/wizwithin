@@ -3,6 +3,7 @@ import SandBox from "./components/SandBox";
 import FractalExplorer from "./components/FractalExplorer";
 import FlockSim from "./components/FlockSim";
 import Chip8Console from "./components/Chip8Console";
+import SynthLab from "./components/SynthLab";
 import ToolCard from "./components/ToolCard";
 
 export default function App() {
@@ -55,6 +56,13 @@ export default function App() {
           description="Classic CHIP-8 interpreter — fetch-decode-execute cycle running in Rust/WASM at 500 Hz."
         >
           <Chip8Console />
+        </ToolCard>
+
+        <ToolCard
+          title="Sonic Alchemy"
+          description="Real-time audio synthesizer — phase-accumulator oscillator in Rust/WASM, streamed via AudioContext."
+        >
+          <SynthLab />
         </ToolCard>
 
         {/* Placeholder for future tools */}
