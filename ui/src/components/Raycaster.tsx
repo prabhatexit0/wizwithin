@@ -12,12 +12,15 @@ export default function Raycaster() {
   const [errorMsg, setErrorMsg] = useState("");
   const [fov, setFov] = useState(0.66);
   const [trippiness, setTrippiness] = useState(1.0);
+  const [showMinimap, setShowMinimap] = useState(true);
 
   // Refs that the animation loop closes over
   const fovRef = useRef(fov);
   fovRef.current = fov;
   const trippinessRef = useRef(trippiness);
   trippinessRef.current = trippiness;
+  const showMinimapRef = useRef(showMinimap);
+  showMinimapRef.current = showMinimap;
 
   const worldRef = useRef<InstanceType<typeof import("@raycaster_engine").World> | null>(null);
 
@@ -99,8 +102,9 @@ export default function Raycaster() {
           if (keys.has("arrowleft") || keys.has("q")) world.rotate_left(rotSpeed);
           if (keys.has("arrowright") || keys.has("e")) world.rotate_right(rotSpeed);
 
-          // Update FOV
+          // Update FOV & minimap visibility
           world.set_fov(fovRef.current);
+          world.set_show_minimap(showMinimapRef.current);
 
           // Render scene
           const elapsed = now / 1000;
@@ -209,6 +213,17 @@ export default function Raycaster() {
                 {trippiness.toFixed(1)}
               </span>
             </label>
+
+            <button
+              onClick={() => setShowMinimap((v) => !v)}
+              className={`px-3 py-1 rounded text-sm font-mono transition-colors ${
+                showMinimap
+                  ? "bg-zinc-700 text-zinc-300"
+                  : "bg-zinc-800 text-zinc-500"
+              }`}
+            >
+              Map {showMinimap ? "ON" : "OFF"}
+            </button>
           </div>
 
           {/* Mobile on-screen controls — visible on small screens */}

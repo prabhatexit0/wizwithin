@@ -142,6 +142,9 @@ pub struct World {
     width: u32,
     height: u32,
     pixels: Vec<u8>,
+
+    // Minimap visibility
+    show_minimap: bool,
 }
 
 #[wasm_bindgen]
@@ -164,6 +167,7 @@ impl World {
             width,
             height,
             pixels: vec![0u8; (width * height * 4) as usize],
+            show_minimap: true,
         }
     }
 
@@ -188,6 +192,12 @@ impl World {
             self.plane_x *= scale;
             self.plane_y *= scale;
         }
+    }
+
+    // -- Minimap toggle ----------------------------------------------------
+
+    pub fn set_show_minimap(&mut self, show: bool) {
+        self.show_minimap = show;
     }
 
     // -- Movement ----------------------------------------------------------
@@ -411,7 +421,9 @@ impl World {
         }
 
         // ── Minimap overlay ──────────────────────────────────────────────
-        self.draw_minimap(w);
+        if self.show_minimap {
+            self.draw_minimap(w);
+        }
     }
 }
 
