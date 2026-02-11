@@ -12,12 +12,15 @@ export default function Raycaster() {
   const [errorMsg, setErrorMsg] = useState("");
   const [fov, setFov] = useState(0.66);
   const [trippiness, setTrippiness] = useState(1.0);
+  const [showMinimap, setShowMinimap] = useState(true);
 
   // Refs that the animation loop closes over
   const fovRef = useRef(fov);
   fovRef.current = fov;
   const trippinessRef = useRef(trippiness);
   trippinessRef.current = trippiness;
+  const showMinimapRef = useRef(showMinimap);
+  showMinimapRef.current = showMinimap;
 
   const worldRef = useRef<InstanceType<typeof import("@raycaster_engine").World> | null>(null);
 
@@ -37,6 +40,17 @@ export default function Raycaster() {
 
   const onKeyUp = useCallback((e: KeyboardEvent) => {
     keysRef.current.delete(e.key.toLowerCase());
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // Mobile touch controls — simulate key hold via pointer events
+  // -----------------------------------------------------------------------
+  const padDown = useCallback((key: string) => {
+    keysRef.current.add(key);
+  }, []);
+
+  const padUp = useCallback((key: string) => {
+    keysRef.current.delete(key);
   }, []);
 
   // -----------------------------------------------------------------------
@@ -88,8 +102,9 @@ export default function Raycaster() {
           if (keys.has("arrowleft") || keys.has("q")) world.rotate_left(rotSpeed);
           if (keys.has("arrowright") || keys.has("e")) world.rotate_right(rotSpeed);
 
-          // Update FOV
+          // Update FOV & minimap visibility
           world.set_fov(fovRef.current);
+          world.set_show_minimap(showMinimapRef.current);
 
           // Render scene
           const elapsed = now / 1000;
@@ -155,7 +170,7 @@ export default function Raycaster() {
         ref={canvasRef}
         width={VIEW_W * 2}
         height={VIEW_H * 2}
-        className="rounded-lg border border-zinc-700 bg-[#1c1c24] w-full max-w-2xl"
+        className="rounded-lg border border-zinc-700 bg-[#1c1c24] w-full max-w-2xl touch-none"
         style={{
           imageRendering: "pixelated",
           aspectRatio: `${VIEW_W} / ${VIEW_H}`,
@@ -198,10 +213,101 @@ export default function Raycaster() {
                 {trippiness.toFixed(1)}
               </span>
             </label>
+
+            <button
+              onClick={() => setShowMinimap((v) => !v)}
+              className={`px-3 py-1 rounded text-sm font-mono transition-colors ${
+                showMinimap
+                  ? "bg-zinc-700 text-zinc-300"
+                  : "bg-zinc-800 text-zinc-500"
+              }`}
+            >
+              Map {showMinimap ? "ON" : "OFF"}
+            </button>
           </div>
 
-          {/* Key legend */}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center text-xs text-zinc-500">
+          {/* Mobile on-screen controls — visible on small screens */}
+          <div
+            className="flex sm:hidden justify-between w-full px-2"
+            style={{ touchAction: "manipulation" }}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {/* Left: movement D-pad */}
+            <div className="grid grid-cols-3 grid-rows-3 gap-1 w-fit">
+              {/* Row 1: forward */}
+              <div />
+              <button
+                onPointerDown={() => padDown("w")}
+                onPointerUp={() => padUp("w")}
+                onPointerLeave={() => padUp("w")}
+                onPointerCancel={() => padUp("w")}
+                className="w-12 h-12 rounded bg-zinc-700 active:bg-emerald-500 active:text-zinc-900 text-zinc-300 text-lg font-bold flex items-center justify-center select-none touch-manipulation"
+                aria-label="Move forward"
+              >
+                &#9650;
+              </button>
+              <div />
+              {/* Row 2: strafe left, backward, strafe right */}
+              <button
+                onPointerDown={() => padDown("a")}
+                onPointerUp={() => padUp("a")}
+                onPointerLeave={() => padUp("a")}
+                onPointerCancel={() => padUp("a")}
+                className="w-12 h-12 rounded bg-zinc-700 active:bg-emerald-500 active:text-zinc-900 text-zinc-300 text-lg font-bold flex items-center justify-center select-none touch-manipulation"
+                aria-label="Strafe left"
+              >
+                &#9664;
+              </button>
+              <button
+                onPointerDown={() => padDown("s")}
+                onPointerUp={() => padUp("s")}
+                onPointerLeave={() => padUp("s")}
+                onPointerCancel={() => padUp("s")}
+                className="w-12 h-12 rounded bg-zinc-700 active:bg-emerald-500 active:text-zinc-900 text-zinc-300 text-lg font-bold flex items-center justify-center select-none touch-manipulation"
+                aria-label="Move backward"
+              >
+                &#9660;
+              </button>
+              <button
+                onPointerDown={() => padDown("d")}
+                onPointerUp={() => padUp("d")}
+                onPointerLeave={() => padUp("d")}
+                onPointerCancel={() => padUp("d")}
+                className="w-12 h-12 rounded bg-zinc-700 active:bg-emerald-500 active:text-zinc-900 text-zinc-300 text-lg font-bold flex items-center justify-center select-none touch-manipulation"
+                aria-label="Strafe right"
+              >
+                &#9654;
+              </button>
+              <div />
+            </div>
+
+            {/* Right: rotation buttons */}
+            <div className="flex items-center gap-2">
+              <button
+                onPointerDown={() => padDown("q")}
+                onPointerUp={() => padUp("q")}
+                onPointerLeave={() => padUp("q")}
+                onPointerCancel={() => padUp("q")}
+                className="w-14 h-14 rounded-lg bg-zinc-700 active:bg-fuchsia-500 active:text-zinc-900 text-zinc-300 text-sm font-bold flex items-center justify-center select-none touch-manipulation"
+                aria-label="Rotate left"
+              >
+                &#8630;
+              </button>
+              <button
+                onPointerDown={() => padDown("e")}
+                onPointerUp={() => padUp("e")}
+                onPointerLeave={() => padUp("e")}
+                onPointerCancel={() => padUp("e")}
+                className="w-14 h-14 rounded-lg bg-zinc-700 active:bg-fuchsia-500 active:text-zinc-900 text-zinc-300 text-sm font-bold flex items-center justify-center select-none touch-manipulation"
+                aria-label="Rotate right"
+              >
+                &#8631;
+              </button>
+            </div>
+          </div>
+
+          {/* Key legend — visible on larger screens with keyboards */}
+          <div className="hidden sm:flex flex-wrap gap-x-4 gap-y-1 justify-center text-xs text-zinc-500">
             <span>
               <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 font-mono">W</kbd>{" "}
               <kbd className="px-1.5 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-zinc-400 font-mono">S</kbd>{" "}

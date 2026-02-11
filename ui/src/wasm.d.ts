@@ -114,6 +114,7 @@ declare module "@raycaster_engine" {
     pixels_ptr(): number;
     pixels_len(): number;
     set_fov(fov_len: number): void;
+    set_show_minimap(show: boolean): void;
     move_forward(speed: number): void;
     move_backward(speed: number): void;
     strafe_left(speed: number): void;
