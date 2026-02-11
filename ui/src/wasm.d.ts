@@ -40,10 +40,17 @@ declare module "@boid_engine" {
     free(): void;
     boids_ptr(): number;
     boids_count(): number;
+    predators_ptr(): number;
+    predators_count(): number;
+    food_ptr(): number;
+    food_count(): number;
     set_separation(w: number): void;
     set_alignment(w: number): void;
     set_cohesion(w: number): void;
     set_count(count: number): void;
+    spawn_food(x: number, y: number): void;
+    clear_food(): void;
+    spawn_predator(): void;
     tick(): void;
   }
 }

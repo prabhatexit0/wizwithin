@@ -14,10 +14,23 @@ const DEFAULT_SEP = 1.5;
 const DEFAULT_ALI = 1.0;
 const DEFAULT_COH = 1.0;
 
+// Per-boid stride in the Float32Array (x, y, vx, vy, eat_timer).
+const BOID_STRIDE = 5;
+// Per-food stride (x, y).
+const FOOD_STRIDE = 2;
+
 // Boid triangle geometry (pointing right along +x).
 const TIP = 6;
 const WING = 3;
 const HALF_W = 2.5;
+
+// Predator triangle geometry (larger).
+const PRED_TIP = 10;
+const PRED_WING = 5;
+const PRED_HALF_W = 4;
+
+// Food dot radius.
+const FOOD_R = 3;
 
 export default function FlockSim() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,7 +46,9 @@ export default function FlockSim() {
   const [count, setCount] = useState(DEFAULT_COUNT);
 
   // Refs that the animation loop closes over.
-  const flockRef = useRef<InstanceType<typeof import("@boid_engine").Flock> | null>(null);
+  const flockRef = useRef<InstanceType<
+    typeof import("@boid_engine").Flock
+  > | null>(null);
 
   // Sync slider changes into WASM each frame via refs.
   const sepRef = useRef(separation);
@@ -80,33 +95,78 @@ export default function FlockSim() {
 
           flock.tick();
 
-          // Read boid data directly from WASM linear memory – zero copy.
-          // Layout per boid: [x: f32, y: f32, vx: f32, vy: f32].
-          const ptr = flock.boids_ptr();
-          const n = flock.boids_count();
-          const data = new Float32Array(wasmMemory.buffer, ptr, n * 4);
+          // --- Read shared-memory buffers from WASM ----------------------
+          const buf = wasmMemory.buffer;
+
+          const boidPtr = flock.boids_ptr();
+          const boidN = flock.boids_count();
+          const boids = new Float32Array(buf, boidPtr, boidN * BOID_STRIDE);
+
+          const predPtr = flock.predators_ptr();
+          const predN = flock.predators_count();
+          const preds = new Float32Array(buf, predPtr, predN * BOID_STRIDE);
+
+          const foodPtr = flock.food_ptr();
+          const foodN = flock.food_count();
+          const foods = new Float32Array(buf, foodPtr, foodN * FOOD_STRIDE);
+
+          // --- Draw ------------------------------------------------------
 
           // Clear.
           ctx.fillStyle = "#18181b"; // zinc-900
           ctx.fillRect(0, 0, SIM_W, SIM_H);
 
-          // Draw each boid as a small rotated triangle.
+          // 1. Food – small green circles.
+          ctx.fillStyle = "#4ade80"; // green-400
+          for (let i = 0; i < foodN; i++) {
+            const off = i * FOOD_STRIDE;
+            ctx.beginPath();
+            ctx.arc(foods[off], foods[off + 1], FOOD_R, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // 2. Boids – emerald triangles with eat-pop scale.
           ctx.fillStyle = "#34d399"; // emerald-400
-          for (let i = 0; i < n; i++) {
-            const off = i * 4;
-            const x = data[off];
-            const y = data[off + 1];
-            const vx = data[off + 2];
-            const vy = data[off + 3];
+          for (let i = 0; i < boidN; i++) {
+            const off = i * BOID_STRIDE;
+            const x = boids[off];
+            const y = boids[off + 1];
+            const vx = boids[off + 2];
+            const vy = boids[off + 3];
+            const eatTimer = boids[off + 4];
+            const angle = Math.atan2(vy, vx);
+            const scale = eatTimer > 0 ? 1.0 + eatTimer * 0.5 : 1.0;
+
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            if (scale !== 1.0) ctx.scale(scale, scale);
+            ctx.beginPath();
+            ctx.moveTo(TIP, 0);
+            ctx.lineTo(-WING, -HALF_W);
+            ctx.lineTo(-WING, HALF_W);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          }
+
+          // 3. Predators – larger red triangles.
+          ctx.fillStyle = "#ef4444"; // red-500
+          for (let i = 0; i < predN; i++) {
+            const off = i * BOID_STRIDE;
+            const x = preds[off];
+            const y = preds[off + 1];
+            const vx = preds[off + 2];
+            const vy = preds[off + 3];
             const angle = Math.atan2(vy, vx);
 
             ctx.save();
             ctx.translate(x, y);
             ctx.rotate(angle);
             ctx.beginPath();
-            ctx.moveTo(TIP, 0);
-            ctx.lineTo(-WING, -HALF_W);
-            ctx.lineTo(-WING, HALF_W);
+            ctx.moveTo(PRED_TIP, 0);
+            ctx.lineTo(-PRED_WING, -PRED_HALF_W);
+            ctx.lineTo(-PRED_WING, PRED_HALF_W);
             ctx.closePath();
             ctx.fill();
             ctx.restore();
@@ -136,6 +196,32 @@ export default function FlockSim() {
       }
     };
   }, []);
+
+  // -----------------------------------------------------------------------
+  // Click handler – left-click spawns a cluster of food
+  // -----------------------------------------------------------------------
+  const onCanvasClick = useCallback(
+    (e: React.MouseEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      const flock = flockRef.current;
+      if (!canvas || !flock) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const sx = SIM_W / rect.width;
+      const sy = SIM_H / rect.height;
+      const cx = (e.clientX - rect.left) * sx;
+      const cy = (e.clientY - rect.top) * sy;
+
+      // Drop a small cluster of 5 food items.
+      for (let i = 0; i < 5; i++) {
+        flock.spawn_food(
+          cx + (Math.random() - 0.5) * 20,
+          cy + (Math.random() - 0.5) * 20,
+        );
+      }
+    },
+    [],
+  );
 
   // -----------------------------------------------------------------------
   // Slider helper
@@ -191,39 +277,57 @@ export default function FlockSim() {
 
       {/* Controls */}
       {status === "running" && (
-        <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
-          <Slider
-            label="Separation"
-            value={separation}
-            onChange={setSeparation}
-            min={0}
-            max={4}
-            step={0.1}
-          />
-          <Slider
-            label="Alignment"
-            value={alignment}
-            onChange={setAlignment}
-            min={0}
-            max={4}
-            step={0.1}
-          />
-          <Slider
-            label="Cohesion"
-            value={cohesion}
-            onChange={setCohesion}
-            min={0}
-            max={4}
-            step={0.1}
-          />
-          <Slider
-            label="Count"
-            value={count}
-            onChange={setCount}
-            min={MIN_COUNT}
-            max={MAX_COUNT}
-            step={10}
-          />
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+            <Slider
+              label="Separation"
+              value={separation}
+              onChange={setSeparation}
+              min={0}
+              max={4}
+              step={0.1}
+            />
+            <Slider
+              label="Alignment"
+              value={alignment}
+              onChange={setAlignment}
+              min={0}
+              max={4}
+              step={0.1}
+            />
+            <Slider
+              label="Cohesion"
+              value={cohesion}
+              onChange={setCohesion}
+              min={0}
+              max={4}
+              step={0.1}
+            />
+            <Slider
+              label="Count"
+              value={count}
+              onChange={setCount}
+              min={MIN_COUNT}
+              max={MAX_COUNT}
+              step={10}
+            />
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => flockRef.current?.spawn_predator()}
+              className="px-3 py-1.5 rounded-lg text-sm bg-red-900/40 text-red-300 hover:bg-red-900/60 transition-colors"
+            >
+              Add Predator
+            </button>
+            <button
+              onClick={() => flockRef.current?.clear_food()}
+              className="px-3 py-1.5 rounded-lg text-sm bg-zinc-800 text-zinc-400 hover:bg-zinc-700 transition-colors"
+            >
+              Clear Food
+            </button>
+          </div>
         </div>
       )}
 
@@ -232,12 +336,13 @@ export default function FlockSim() {
         ref={canvasRef}
         width={SIM_W}
         height={SIM_H}
-        className="rounded-lg border border-zinc-700 bg-zinc-900 w-full max-w-[800px]"
+        className="rounded-lg border border-zinc-700 bg-zinc-900 w-full max-w-[800px] cursor-crosshair"
+        onClick={onCanvasClick}
       />
 
       {status === "running" && (
         <p className="text-zinc-500 text-xs text-center px-2">
-          Drag the sliders to tweak flocking behaviour
+          Click canvas to drop food &middot; Drag sliders to tweak flocking
         </p>
       )}
     </div>
