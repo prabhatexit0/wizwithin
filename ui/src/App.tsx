@@ -5,6 +5,7 @@ import FractalExplorer from "./components/FractalExplorer";
 import FlockSim from "./components/FlockSim";
 import Chip8Console from "./components/Chip8Console";
 import SynthLab from "./components/SynthLab";
+import Raycaster from "./components/Raycaster";
 
 interface MicroApp {
   slug: string;
@@ -62,6 +63,14 @@ const APPS: MicroApp[] = [
       "Real-time audio synthesizer — phase-accumulator oscillator in Rust/WASM, streamed via AudioContext.",
     component: SynthLab,
     color: "#fb923c",
+  },
+  {
+    slug: "raycaster",
+    title: "Retro Raycaster",
+    description:
+      "Wolfenstein-style 2.5D maze explorer — DDA raycasting in Rust/WASM with psychedelic procedural walls.",
+    component: Raycaster,
+    color: "#e879f9",
   },
 ];
 

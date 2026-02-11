@@ -10,7 +10,8 @@
     "wasm:boids": "wasm-pack build crates/boid_engine --target web --out-dir pkg",
     "wasm:chip8": "wasm-pack build crates/chip8_core --target web --out-dir pkg",
     "wasm:synth": "wasm-pack build crates/synth_engine --target web --out-dir pkg",
-    "wasm:build": "npm run wasm:snake && npm run wasm:sand && npm run wasm:fractal && npm run wasm:boids && npm run wasm:chip8 && npm run wasm:synth",
+    "wasm:raycaster": "wasm-pack build crates/raycaster_engine --target web --out-dir pkg",
+    "wasm:build": "npm run wasm:snake && npm run wasm:sand && npm run wasm:fractal && npm run wasm:boids && npm run wasm:chip8 && npm run wasm:synth && npm run wasm:raycaster",
     "dev": "npm run wasm:build && npm run --prefix ui dev",
     "build": "npm run wasm:build && npm run --prefix ui build",
     "preview": "npm run --prefix ui preview"
