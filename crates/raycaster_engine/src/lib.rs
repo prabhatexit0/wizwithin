@@ -196,10 +196,10 @@ impl World {
         let nx = self.pos_x + self.dir_x * speed;
         let ny = self.pos_y + self.dir_y * speed;
         // Slide along walls: check x and y independently
-        if self.map[self.pos_y as usize * MAP_W + nx as usize] == 0 {
+        if is_open(&self.map, nx, self.pos_y) {
             self.pos_x = nx;
         }
-        if self.map[ny as usize * MAP_W + self.pos_x as usize] == 0 {
+        if is_open(&self.map, self.pos_x, ny) {
             self.pos_y = ny;
         }
     }
@@ -207,10 +207,10 @@ impl World {
     pub fn move_backward(&mut self, speed: f64) {
         let nx = self.pos_x - self.dir_x * speed;
         let ny = self.pos_y - self.dir_y * speed;
-        if self.map[self.pos_y as usize * MAP_W + nx as usize] == 0 {
+        if is_open(&self.map, nx, self.pos_y) {
             self.pos_x = nx;
         }
-        if self.map[ny as usize * MAP_W + self.pos_x as usize] == 0 {
+        if is_open(&self.map, self.pos_x, ny) {
             self.pos_y = ny;
         }
     }
@@ -218,10 +218,10 @@ impl World {
     pub fn strafe_left(&mut self, speed: f64) {
         let nx = self.pos_x - self.plane_x * speed;
         let ny = self.pos_y - self.plane_y * speed;
-        if self.map[self.pos_y as usize * MAP_W + nx as usize] == 0 {
+        if is_open(&self.map, nx, self.pos_y) {
             self.pos_x = nx;
         }
-        if self.map[ny as usize * MAP_W + self.pos_x as usize] == 0 {
+        if is_open(&self.map, self.pos_x, ny) {
             self.pos_y = ny;
         }
     }
@@ -229,10 +229,10 @@ impl World {
     pub fn strafe_right(&mut self, speed: f64) {
         let nx = self.pos_x + self.plane_x * speed;
         let ny = self.pos_y + self.plane_y * speed;
-        if self.map[self.pos_y as usize * MAP_W + nx as usize] == 0 {
+        if is_open(&self.map, nx, self.pos_y) {
             self.pos_x = nx;
         }
-        if self.map[ny as usize * MAP_W + self.pos_x as usize] == 0 {
+        if is_open(&self.map, self.pos_x, ny) {
             self.pos_y = ny;
         }
     }
@@ -413,6 +413,16 @@ impl World {
         // ── Minimap overlay ──────────────────────────────────────────────
         self.draw_minimap(w);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Bounds-checked map lookup — returns true when (x, y) is inside the map
+// and the cell is empty (0).  Out-of-bounds coordinates are treated as walls.
+// ---------------------------------------------------------------------------
+fn is_open(map: &[u8; MAP_SIZE], x: f64, y: f64) -> bool {
+    let xi = x as usize; // negative f64 saturates to 0
+    let yi = y as usize;
+    xi < MAP_W && yi < MAP_H && map[yi * MAP_W + xi] == 0
 }
 
 // ---------------------------------------------------------------------------
