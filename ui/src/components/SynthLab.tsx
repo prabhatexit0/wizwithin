@@ -157,6 +157,7 @@ export default function SynthLab() {
   // -------------------------------------------------------------------
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      e.preventDefault();
       activeRef.current = true;
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       ensureAudio();
@@ -168,6 +169,7 @@ export default function SynthLab() {
   const onPointerMove = useCallback(
     (e: React.PointerEvent) => {
       if (!activeRef.current) return;
+      e.preventDefault();
       applyPointer(e.clientX, e.clientY);
     },
     [applyPointer],
@@ -309,7 +311,7 @@ export default function SynthLab() {
         ref={padRef}
         width={512}
         height={320}
-        className="rounded-lg border border-zinc-700 bg-zinc-900 touch-none w-full max-w-[512px] cursor-crosshair"
+        className="rounded-lg border border-zinc-700 bg-zinc-900 touch-none select-none w-full max-w-[512px] cursor-crosshair"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
