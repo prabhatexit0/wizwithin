@@ -33,12 +33,16 @@ export default defineConfig({
         __dirname,
         "../crates/synth_engine/pkg",
       ),
+      "@raycaster_engine": path.resolve(
+        __dirname,
+        "../crates/raycaster_engine/pkg",
+      ),
     },
   },
   build: {
     target: "esnext",
   },
   optimizeDeps: {
-    exclude: ["@snake_engine", "@sand_engine", "@fractal_engine", "@boid_engine", "@chip8_core", "@synth_engine"],
+    exclude: ["@snake_engine", "@sand_engine", "@fractal_engine", "@boid_engine", "@chip8_core", "@synth_engine", "@raycaster_engine"],
   },
 });

@@ -101,6 +101,29 @@ declare module "@synth_engine" {
   }
 }
 
+declare module "@raycaster_engine" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class World {
+    constructor(width: number, height: number);
+    free(): void;
+    pixels_ptr(): number;
+    pixels_len(): number;
+    set_fov(fov_len: number): void;
+    move_forward(speed: number): void;
+    move_backward(speed: number): void;
+    strafe_left(speed: number): void;
+    strafe_right(speed: number): void;
+    rotate_left(speed: number): void;
+    rotate_right(speed: number): void;
+    render(time: number, trippiness: number): void;
+  }
+}
+
 declare module "@fractal_engine" {
   interface InitOutput {
     readonly memory: WebAssembly.Memory;
