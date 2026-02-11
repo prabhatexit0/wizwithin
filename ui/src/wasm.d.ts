@@ -27,3 +27,30 @@ declare module "@sand_engine" {
     clear(): void;
   }
 }
+
+declare module "@fractal_engine" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class Fractal {
+    constructor(width: number, height: number);
+    free(): void;
+    resize(new_width: number, new_height: number): void;
+    pan(dx_pixels: number, dy_pixels: number): void;
+    zoom(factor: number, screen_x: number, screen_y: number): void;
+    set_palette(palette: number): void;
+    palette(): number;
+    set_max_iter(max_iter: number): void;
+    max_iter(): number;
+    center_x(): number;
+    center_y(): number;
+    scale(): number;
+    render(): void;
+    buffer_ptr(): number;
+    buffer_len(): number;
+    reset(): void;
+  }
+}
