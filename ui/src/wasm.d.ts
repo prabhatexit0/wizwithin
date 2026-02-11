@@ -125,6 +125,34 @@ declare module "@raycaster_engine" {
   }
 }
 
+declare module "@evolution_engine" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class Simulation {
+    constructor(pop_size: number);
+    free(): void;
+    tick(steps: number): void;
+    points_ptr(): number;
+    points_len(): number;
+    points_per_creature(): number;
+    creature_count(): number;
+    muscle_indices_ptr(): number;
+    muscle_count(): number;
+    best_idx(): number;
+    generation(): number;
+    best_distance(): number;
+    record_distance(): number;
+    gen_progress(): number;
+    ground_y(): number;
+    start_x(): number;
+    reset(): void;
+  }
+}
+
 declare module "@fractal_engine" {
   interface InitOutput {
     readonly memory: WebAssembly.Memory;

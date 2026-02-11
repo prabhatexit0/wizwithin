@@ -35,6 +35,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "evolution_engine"
+version = "0.1.0"
+dependencies = [
+ "getrandom",
+ "rand",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "fractal_engine"
 version = "0.1.0"
 dependencies = [
