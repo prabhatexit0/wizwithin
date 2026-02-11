@@ -55,6 +55,30 @@ declare module "@boid_engine" {
   }
 }
 
+declare module "@chip8_core" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class Cpu {
+    constructor();
+    free(): void;
+    load_rom(rom: Uint8Array): void;
+    reset(): void;
+    tick_timers(): void;
+    tick_cpu(): void;
+    sound_active(): boolean;
+    key_down(key: number): void;
+    key_up(key: number): void;
+    display_ptr(): number;
+    display_len(): number;
+    display_width(): number;
+    display_height(): number;
+  }
+}
+
 declare module "@fractal_engine" {
   interface InitOutput {
     readonly memory: WebAssembly.Memory;

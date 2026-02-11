@@ -25,12 +25,16 @@ export default defineConfig({
         __dirname,
         "../crates/boid_engine/pkg",
       ),
+      "@chip8_core": path.resolve(
+        __dirname,
+        "../crates/chip8_core/pkg",
+      ),
     },
   },
   build: {
     target: "esnext",
   },
   optimizeDeps: {
-    exclude: ["@snake_engine", "@sand_engine", "@fractal_engine", "@boid_engine"],
+    exclude: ["@snake_engine", "@sand_engine", "@fractal_engine", "@boid_engine", "@chip8_core"],
   },
 });
