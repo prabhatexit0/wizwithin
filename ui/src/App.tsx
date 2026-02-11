@@ -2,6 +2,7 @@ import SnakeGame from "./components/SnakeGame";
 import SandBox from "./components/SandBox";
 import FractalExplorer from "./components/FractalExplorer";
 import FlockSim from "./components/FlockSim";
+import Chip8Console from "./components/Chip8Console";
 import ToolCard from "./components/ToolCard";
 
 export default function App() {
@@ -47,6 +48,13 @@ export default function App() {
           description="Boids algorithm — separation, alignment &amp; cohesion computed in Rust/WASM, rendered via Canvas 2D."
         >
           <FlockSim />
+        </ToolCard>
+
+        <ToolCard
+          title="CHIP-8 Emulator"
+          description="Classic CHIP-8 interpreter — fetch-decode-execute cycle running in Rust/WASM at 500 Hz."
+        >
+          <Chip8Console />
         </ToolCard>
 
         {/* Placeholder for future tools */}
