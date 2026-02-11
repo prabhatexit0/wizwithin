@@ -5,9 +5,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 // ---------------------------------------------------------------------------
 const CHIP8_W = 64;
 const CHIP8_H = 32;
-const SCALE = 10; // each CHIP-8 pixel → 10x10 CSS pixels
-const CANVAS_W = CHIP8_W * SCALE;
-const CANVAS_H = CHIP8_H * SCALE;
 
 // Foreground / background colours (phosphor green on dark)
 const FG = [0x33, 0xff, 0x66]; // #33ff66
@@ -54,64 +51,108 @@ const IBM_LOGO: number[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// A simple "Particle" test ROM that animates a bouncing pixel.
-// Uses: CLS, LD, ADD, DRW, JP, SE, SNE — exercises more opcodes.
+// Particle bounce ROM — XOR-draw a pixel that bounces off all four edges.
+//
+// Uses a delay timer (2 ticks @ 60 Hz ≈ 30 fps) for visible animation and
+// SNE (skip-if-not-equal) for clean boundary checks instead of JP spaghetti.
+//
+// Registers:  V0=x  V1=y  V2=dx  V3=dy  V5=scratch
+//
+// Address  Bytes   Instruction
+// ------- ------  -------------------------------------------
+// 0x200   00 E0   CLS
+// 0x202   60 01   LD V0, 1           x = 1
+// 0x204   61 01   LD V1, 1           y = 1
+// 0x206   62 01   LD V2, 1           dx = +1
+// 0x208   63 01   LD V3, 1           dy = +1
+// 0x20A   A2 32   LD I, 0x232        sprite address
+// 0x20C   D0 11   DRW V0, V1, 1      initial draw
+//
+// LOOP (0x20E):
+// 0x20E   65 02   LD V5, 2           delay = 2 (~33 ms)
+// 0x210   F5 15   LD DT, V5
+// WAIT (0x212):
+// 0x212   F5 07   LD V5, DT
+// 0x214   35 00   SE V5, 0           skip if timer expired
+// 0x216   12 12   JP 0x212           spin-wait
+//
+// 0x218   D0 11   DRW V0, V1, 1      erase old pixel (XOR)
+// 0x21A   80 24   ADD V0, V2         x += dx
+// 0x21C   81 34   ADD V1, V3         y += dy
+//
+// 0x21E   40 3F   SNE V0, 63         skip next if x ≠ 63
+// 0x220   62 FF   LD V2, 0xFF        dx = -1
+// 0x222   40 00   SNE V0, 0          skip next if x ≠ 0
+// 0x224   62 01   LD V2, 1           dx = +1
+//
+// 0x226   41 1F   SNE V1, 31         skip next if y ≠ 31
+// 0x228   63 FF   LD V3, 0xFF        dy = -1
+// 0x22A   41 00   SNE V1, 0          skip next if y ≠ 0
+// 0x22C   63 01   LD V3, 1           dy = +1
+//
+// 0x22E   D0 11   DRW V0, V1, 1      draw new pixel
+// 0x230   12 0E   JP 0x20E           loop
+//
+// 0x232   80      sprite: single pixel (MSB of 8-wide row)
 // ---------------------------------------------------------------------------
 const PARTICLE_ROM: number[] = [
-  // Setup: V0=x, V1=y, V2=dx(1), V3=dy(1), V4=sprite byte
-  0x00, 0xe0, // CLS
-  0x60, 0x20, // LD V0, 32  (x start = center)
-  0x61, 0x10, // LD V1, 16  (y start = center)
-  0x62, 0x01, // LD V2, 1   (dx = +1)
-  0x63, 0x01, // LD V3, 1   (dy = +1)
-  0xa2, 0x2c, // LD I, 0x22C (sprite data at end)
-
-  // Main loop (address 0x20C):
-  0x00, 0xe0, // CLS
-  0xd0, 0x11, // DRW V0, V1, 1  (draw 1-row sprite)
-  0x80, 0x24, // ADD V0, V2     (x += dx)
-  0x81, 0x34, // ADD V1, V3     (y += dy)
-
-  // Bounce X: if V0 == 63, flip dx
-  0x64, 0x3f, // LD V4, 63
-  0x50, 0x40, // SE V0, V4
-  0x12, 0x1e, // JP skip_flip_x (0x21E)
-  0x72, 0xff, // ADD V2, 0xFF  (dx = dx - 1, wrapping: 1->0)
-  0x72, 0xff, // ADD V2, 0xFF  (dx = 0 - 1 = 0xFF = -1)
-  // if V0 == 0, flip dx
-  0x12, 0x22, // JP skip_check_x0 (0x222)
-  0x30, 0x00, // SE V0, 0 — skip_flip_x label (0x21E)
-  0x12, 0x22, // JP skip_check_x0 (0x222)
-  0x62, 0x01, // LD V2, 1  (dx = +1)
-
-  // skip_check_x0 (0x222):
-  // Bounce Y: if V1 == 31, flip dy
-  0x64, 0x1f, // LD V4, 31
-  0x51, 0x40, // SE V1, V4
-  0x12, 0x2a, // JP skip_flip_y
-  0x63, 0xff, // LD V3, 0xFF (dy = -1)
-  0x12, 0x0c, // JP main_loop (0x20C)
-
-  // skip_flip_y (0x22A):
-  0x12, 0x0c, // JP main_loop (0x20C)
-
-  // Sprite data at 0x22C:
-  0x80, // 1 pixel (top-left of the 8-wide sprite)
+  0x00, 0xe0,
+  0x60, 0x01,
+  0x61, 0x01,
+  0x62, 0x01,
+  0x63, 0x01,
+  0xa2, 0x32,
+  0xd0, 0x11,
+  // LOOP
+  0x65, 0x02,
+  0xf5, 0x15,
+  // WAIT
+  0xf5, 0x07,
+  0x35, 0x00,
+  0x12, 0x12,
+  // move
+  0xd0, 0x11,
+  0x80, 0x24,
+  0x81, 0x34,
+  // bounce X
+  0x40, 0x3f,
+  0x62, 0xff,
+  0x40, 0x00,
+  0x62, 0x01,
+  // bounce Y
+  0x41, 0x1f,
+  0x63, 0xff,
+  0x41, 0x00,
+  0x63, 0x01,
+  // draw + loop
+  0xd0, 0x11,
+  0x12, 0x0e,
+  // sprite
+  0x80,
 ];
 
 // ---------------------------------------------------------------------------
 // Keypad test ROM — displays pressed key value on screen.
-// Exercises: FX0A (wait for key), FX29 (font sprite), DRW, JP
+//
+// FX0A (wait-for-key) comes FIRST so the drawn character stays on screen
+// while waiting for the next key press.
+//
+// 0x200   F0 0A   LD V0, K           wait for key
+// 0x202   00 E0   CLS                clear old char
+// 0x204   F0 29   LD F, V0           I = font for V0
+// 0x206   61 1E   LD V1, 30          x ≈ center
+// 0x208   62 0E   LD V2, 14          y ≈ center
+// 0x20A   D1 25   DRW V1, V2, 5      draw 5-row font
+// 0x20C   12 00   JP 0x200           loop
 // ---------------------------------------------------------------------------
 const KEYPAD_TEST_ROM: number[] = [
-  // Loop start (0x200):
-  0x00, 0xe0, // CLS
-  0xf0, 0x0a, // LD V0, K   (wait for keypress)
-  0xf0, 0x29, // LD F, V0   (I = font sprite for pressed key)
-  0x61, 0x0c, // LD V1, 12  (x = 12, roughly centered)
-  0x62, 0x0a, // LD V2, 10  (y = 10)
-  0xd1, 0x25, // DRW V1, V2, 5  (draw 5-row font char)
-  0x12, 0x00, // JP 0x200   (loop back)
+  0xf0, 0x0a,
+  0x00, 0xe0,
+  0xf0, 0x29,
+  0x61, 0x1e,
+  0x62, 0x0e,
+  0xd1, 0x25,
+  0x12, 0x00,
 ];
 
 type RomEntry = { name: string; bytes: number[]; description: string };
@@ -121,6 +162,30 @@ const ROMS: RomEntry[] = [
   { name: "Particle", bytes: PARTICLE_ROM, description: "Bouncing pixel animation" },
   { name: "Keypad Test", bytes: KEYPAD_TEST_ROM, description: "Press keys to see hex values" },
 ];
+
+// ---------------------------------------------------------------------------
+// Keypad constants (hoisted outside render)
+// ---------------------------------------------------------------------------
+const KEYPAD_LAYOUT = [
+  [0x1, 0x2, 0x3, 0xc],
+  [0x4, 0x5, 0x6, 0xd],
+  [0x7, 0x8, 0x9, 0xe],
+  [0xa, 0x0, 0xb, 0xf],
+];
+
+const KEY_LABELS: Record<number, string> = {
+  0x0: "0", 0x1: "1", 0x2: "2", 0x3: "3",
+  0x4: "4", 0x5: "5", 0x6: "6", 0x7: "7",
+  0x8: "8", 0x9: "9", 0xa: "A", 0xb: "B",
+  0xc: "C", 0xd: "D", 0xe: "E", 0xf: "F",
+};
+
+const KB_HINTS: Record<number, string> = {
+  0x1: "1", 0x2: "2", 0x3: "3", 0xc: "4",
+  0x4: "Q", 0x5: "W", 0x6: "E", 0xd: "R",
+  0x7: "A", 0x8: "S", 0x9: "D", 0xe: "F",
+  0xa: "Z", 0x0: "X", 0xb: "C", 0xf: "V",
+};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -297,36 +362,14 @@ export default function Chip8Console() {
     return <p className="text-zinc-400 text-sm animate-pulse">Loading CHIP-8 emulator...</p>;
   }
 
-  const KEYPAD_LAYOUT = [
-    [0x1, 0x2, 0x3, 0xc],
-    [0x4, 0x5, 0x6, 0xd],
-    [0x7, 0x8, 0x9, 0xe],
-    [0xa, 0x0, 0xb, 0xf],
-  ];
-
-  const KEY_LABELS: Record<number, string> = {
-    0x0: "0", 0x1: "1", 0x2: "2", 0x3: "3",
-    0x4: "4", 0x5: "5", 0x6: "6", 0x7: "7",
-    0x8: "8", 0x9: "9", 0xa: "A", 0xb: "B",
-    0xc: "C", 0xd: "D", 0xe: "E", 0xf: "F",
-  };
-
-  // Keyboard hint labels for the on-screen pad
-  const KB_HINTS: Record<number, string> = {
-    0x1: "1", 0x2: "2", 0x3: "3", 0xc: "4",
-    0x4: "Q", 0x5: "W", 0x6: "E", 0xd: "R",
-    0x7: "A", 0x8: "S", 0x9: "D", 0xe: "F",
-    0xa: "Z", 0x0: "X", 0xb: "C", 0xf: "V",
-  };
-
   return (
     <div className="space-y-4">
       {/* ROM selector & run button */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <select
           value={selectedRom}
           onChange={(e) => setSelectedRom(Number(e.target.value))}
-          className="rounded bg-zinc-700 text-zinc-100 text-sm px-3 py-1.5 border border-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+          className="min-w-0 flex-1 sm:flex-none rounded bg-zinc-700 text-zinc-100 text-sm px-2 sm:px-3 py-1.5 border border-zinc-600 focus:outline-none focus:ring-1 focus:ring-emerald-400"
         >
           {ROMS.map((rom, i) => (
             <option key={rom.name} value={i}>
@@ -336,35 +379,39 @@ export default function Chip8Console() {
         </select>
         <button
           onClick={() => loadAndRun(ROMS[selectedRom].bytes)}
-          className="rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-900 font-medium text-sm px-4 py-1.5 transition-colors"
+          className="rounded bg-emerald-500 hover:bg-emerald-400 text-zinc-900 font-medium text-sm px-4 py-1.5 transition-colors shrink-0"
         >
           {status === "running" ? "Restart" : "Run"}
         </button>
       </div>
 
-      {/* Display canvas */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start">
+      {/* Display + keypad */}
+      <div className="flex flex-col gap-4 items-start">
+        {/* Display canvas — responsive: fills parent up to 640px, keeps 2:1 ratio */}
         <canvas
           ref={canvasRef}
           width={CHIP8_W}
           height={CHIP8_H}
-          className="rounded border border-zinc-600 bg-[#0a0f0a]"
+          className="w-full max-w-[640px] rounded border border-zinc-600 bg-[#0a0f0a]"
           style={{
-            width: CANVAS_W,
-            height: CANVAS_H,
+            aspectRatio: "2 / 1",
             imageRendering: "pixelated",
           }}
         />
 
-        {/* On-screen keypad */}
-        <div className="grid grid-cols-4 gap-1.5 shrink-0">
+        {/* On-screen keypad — touch-friendly (48×48 targets) */}
+        <div
+          className="grid grid-cols-4 gap-1.5 sm:gap-2"
+          style={{ touchAction: "manipulation" }}
+        >
           {KEYPAD_LAYOUT.flat().map((key) => (
             <button
               key={key}
               onPointerDown={() => handlePadDown(key)}
               onPointerUp={() => handlePadUp(key)}
               onPointerLeave={() => handlePadUp(key)}
-              className="w-11 h-11 rounded bg-zinc-700 hover:bg-zinc-600 active:bg-emerald-500 active:text-zinc-900 text-zinc-300 text-xs font-mono flex flex-col items-center justify-center leading-tight transition-colors select-none"
+              onContextMenu={(e) => e.preventDefault()}
+              className="w-12 h-12 rounded bg-zinc-700 hover:bg-zinc-600 active:bg-emerald-500 active:text-zinc-900 text-zinc-300 text-xs font-mono flex flex-col items-center justify-center leading-tight transition-colors select-none touch-manipulation"
             >
               <span className="font-bold">{KEY_LABELS[key]}</span>
               <span className="text-[9px] text-zinc-500">{KB_HINTS[key]}</span>
@@ -375,7 +422,7 @@ export default function Chip8Console() {
 
       {/* Instructions */}
       <p className="text-xs text-zinc-500">
-        Keys: 1-4 / Q-R / A-F / Z-V map to CHIP-8 hex pad 0-F.
+        Tap the keypad or use keyboard: 1-4 / Q-R / A-F / Z-V → CHIP-8 hex pad 0-F.
         {status === "ready" && " Select a ROM and press Run to start."}
       </p>
     </div>
