@@ -17,12 +17,16 @@ export default defineConfig({
         __dirname,
         "../crates/sand_engine/pkg",
       ),
+      "@fractal_engine": path.resolve(
+        __dirname,
+        "../crates/fractal_engine/pkg",
+      ),
     },
   },
   build: {
     target: "esnext",
   },
   optimizeDeps: {
-    exclude: ["@snake_engine", "@sand_engine"],
+    exclude: ["@snake_engine", "@sand_engine", "@fractal_engine"],
   },
 });

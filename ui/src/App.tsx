@@ -1,5 +1,6 @@
 import SnakeGame from "./components/SnakeGame";
 import SandBox from "./components/SandBox";
+import FractalExplorer from "./components/FractalExplorer";
 import ToolCard from "./components/ToolCard";
 
 export default function App() {
@@ -31,6 +32,13 @@ export default function App() {
           description="Falling sand cellular automata — shared-memory rendering from Rust to Canvas."
         >
           <SandBox />
+        </ToolCard>
+
+        <ToolCard
+          title="Fractal Explorer"
+          description="Mandelbrot set — f64 escape-time computed in Rust/WASM with smooth pan & zoom."
+        >
+          <FractalExplorer />
         </ToolCard>
 
         {/* Placeholder for future tools */}

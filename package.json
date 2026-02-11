@@ -6,7 +6,8 @@
   "scripts": {
     "wasm:snake": "wasm-pack build crates/snake_engine --target web --out-dir pkg",
     "wasm:sand": "wasm-pack build crates/sand_engine --target web --out-dir pkg",
-    "wasm:build": "npm run wasm:snake && npm run wasm:sand",
+    "wasm:fractal": "wasm-pack build crates/fractal_engine --target web --out-dir pkg",
+    "wasm:build": "npm run wasm:snake && npm run wasm:sand && npm run wasm:fractal",
     "dev": "npm run wasm:build && npm run --prefix ui dev",
     "build": "npm run wasm:build && npm run --prefix ui build",
     "preview": "npm run --prefix ui preview"
