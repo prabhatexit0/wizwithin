@@ -838,6 +838,7 @@ impl Universe {
     fn tick_bird(&mut self, base: usize, _w: i32, h: i32, rng: &mut impl Rng) {
         let x = self.creatures[base];
         let y = self.creatures[base + 1];
+        let energy = self.creatures[base + 3];
         let gx = x as i32;
         let gy = y as i32;
 
@@ -858,10 +859,63 @@ impl Universe {
             }
         }
 
+        // --- Hunger-driven food seeking ---
+        // When energy is below half, scan a wider area for food and fly toward it.
+        let hungry = energy < MAX_ENERGY * 0.5;
+        if hungry {
+            // Scan in a radius below and around the bird for food.
+            let scan_radius: i32 = 8;
+            let mut best_food: Option<(i32, i32)> = None;
+            let mut best_dist = i32::MAX;
+            for sy in gy - scan_radius..=gy + scan_radius {
+                for sx in gx - scan_radius..=gx + scan_radius {
+                    if self.in_bounds(sx, sy) {
+                        let cell = self.get(sx, sy);
+                        if cell == PLANT || cell == FRUIT {
+                            let dist = (sx - gx).abs() + (sy - gy).abs();
+                            if dist < best_dist {
+                                best_dist = dist;
+                                best_food = Some((sx, sy));
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some((fx, fy)) = best_food {
+                // Fly toward the food.
+                let dx = (fx - gx).signum();
+                let dy = (fy - gy).signum();
+                let nx = gx + dx;
+                let ny = gy + dy;
+                if self.in_bounds(nx, ny) && self.get(nx, ny) == EMPTY {
+                    self.creatures[base] = nx as f32;
+                    self.creatures[base + 1] = ny as f32;
+                    self.creatures[base + 4] = STATE_MOVING;
+                    return;
+                }
+                // If direct path blocked, try just horizontal or just vertical.
+                if dx != 0 && self.in_bounds(gx + dx, gy) && self.get(gx + dx, gy) == EMPTY {
+                    self.creatures[base] = (gx + dx) as f32;
+                    self.creatures[base + 4] = STATE_MOVING;
+                    return;
+                }
+                if dy != 0 && self.in_bounds(gx, gy + dy) && self.get(gx, gy + dy) == EMPTY {
+                    self.creatures[base + 1] = (gy + dy) as f32;
+                    self.creatures[base + 4] = STATE_MOVING;
+                    return;
+                }
+            }
+        }
+
         // --- Flying: random wander through EMPTY space ---
-        // Birds have a slight upward bias (they prefer to fly).
         let dx: i32 = rng.random_range(-1i32..=1);
-        let dy: i32 = if rng.random_range(0u32..3) == 0 { 1 } else { -1 }; // upward bias
+        // When hungry and no food spotted, bias downward to forage near the ground.
+        // When sated, keep a mild upward bias.
+        let dy: i32 = if hungry {
+            if rng.random_range(0u32..3) == 0 { -1 } else { 1 } // downward bias
+        } else {
+            if rng.random_range(0u32..3) == 0 { 1 } else { -1 } // upward bias
+        };
 
         // Occasionally rest: 5% chance to try to land on a surface.
         if rng.random_range(0u32..20) == 0 {
