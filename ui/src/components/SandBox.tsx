@@ -14,8 +14,20 @@ const EMPTY = 0;
 const SAND = 1;
 const WATER = 2;
 const STONE = 3;
+const WOOD = 4;
+const FIRE = 5;
+// SMOKE = 6  (not paintable)
+const PLANT = 7;
+// STEAM = 8  (not paintable)
 
-type BrushType = typeof SAND | typeof WATER | typeof STONE | typeof EMPTY;
+type BrushType =
+  | typeof SAND
+  | typeof WATER
+  | typeof STONE
+  | typeof EMPTY
+  | typeof WOOD
+  | typeof FIRE
+  | typeof PLANT;
 
 interface BrushOption {
   label: string;
@@ -27,6 +39,9 @@ const BRUSHES: BrushOption[] = [
   { label: "Sand", value: SAND, colour: "bg-yellow-400" },
   { label: "Water", value: WATER, colour: "bg-blue-400" },
   { label: "Stone", value: STONE, colour: "bg-zinc-400" },
+  { label: "Wood", value: WOOD, colour: "bg-amber-700" },
+  { label: "Fire", value: FIRE, colour: "bg-orange-500" },
+  { label: "Plant", value: PLANT, colour: "bg-green-500" },
   { label: "Eraser", value: EMPTY, colour: "bg-zinc-900 border border-zinc-600" },
 ];
 
