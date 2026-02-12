@@ -13,6 +13,9 @@ const FIRE: u8 = 5;
 const SMOKE: u8 = 6;
 const PLANT: u8 = 7;
 const STEAM: u8 = 8;
+const SOIL: u8 = 9;
+const SEED: u8 = 10;
+const FRUIT: u8 = 11;
 
 // ---------------------------------------------------------------------------
 // Lifetime limits for ephemeral elements (in ticks).
@@ -20,6 +23,22 @@ const STEAM: u8 = 8;
 const FIRE_MAX_LIFE: u8 = 40;
 const SMOKE_MAX_LIFE: u8 = 60;
 const STEAM_MAX_LIFE: u8 = 80;
+const SEED_GERMINATE_TICKS: u8 = 120; // ~2 seconds at 60 fps
+const PLANT_MATURITY: u8 = 200;       // ticks before a plant can fruit
+
+// ---------------------------------------------------------------------------
+// Creature constants
+// ---------------------------------------------------------------------------
+const CREATURE_STRIDE: usize = 5; // x, y, species, energy, state
+const SPECIES_RABBIT: f32 = 0.0;
+const SPECIES_FISH: f32 = 1.0;
+const SPECIES_BIRD: f32 = 2.0;
+const STATE_IDLE: f32 = 0.0;
+const STATE_MOVING: f32 = 1.0;
+const STATE_EATING: f32 = 2.0;
+const MAX_ENERGY: f32 = 200.0;
+const ENERGY_DRAIN: f32 = 0.15;
+const ENERGY_FROM_FOOD: f32 = 60.0;
 
 // ---------------------------------------------------------------------------
 // RGBA colours for each cell type (used when writing the pixel buffer).
@@ -42,8 +61,30 @@ fn cell_colour(cell: u8, idx: usize) -> [u8; 4] {
         SMOKE => [0x60, 0x60, 0x68, 0x90],  // translucent grey
         PLANT => [0x30, 0xA0, 0x30, 0xFF],   // green
         STEAM => [0xC8, 0xD8, 0xE8, 0x80],   // translucent white-blue
+        SOIL => [0x5C, 0x3A, 0x1E, 0xFF],    // rich dark brown
+        SEED => [0xD2, 0xB4, 0x8C, 0xFF],    // light tan
+        FRUIT => [0xE8, 0x22, 0x22, 0xFF],   // bright red
         _ => [0x1C, 0x1C, 0x24, 0xFF],       // background (dark)
     }
+}
+
+/// Creature colours (drawn on top of the grid).
+fn creature_colour(species: f32) -> [u8; 4] {
+    if species == SPECIES_RABBIT {
+        [0xF0, 0xC0, 0xD0, 0xFF] // pink/white
+    } else if species == SPECIES_FISH {
+        [0xFF, 0x8C, 0x00, 0xFF] // orange
+    } else {
+        [0x60, 0xB0, 0xF0, 0xFF] // blue/yellow
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: check if a cell type is solid ground for walking creatures.
+// ---------------------------------------------------------------------------
+#[inline]
+fn is_solid(cell: u8) -> bool {
+    matches!(cell, SAND | STONE | WOOD | SOIL | PLANT)
 }
 
 // ---------------------------------------------------------------------------
@@ -51,9 +92,10 @@ fn cell_colour(cell: u8, idx: usize) -> [u8; 4] {
 //
 // Layout
 // ------
-// `cells`  : width * height  u8 values  (the automaton grid)
-// `life`   : width * height  u8 values  (remaining lifetime for ephemeral cells)
-// `pixels` : width * height * 4  u8 values  (RGBA frame-buffer)
+// `cells`     : width * height  u8 values  (the automaton grid)
+// `life`      : width * height  u8 values  (remaining lifetime / maturity)
+// `pixels`    : width * height * 4  u8 values  (RGBA frame-buffer)
+// `creatures` : flat f32 vec  (CREATURE_STRIDE floats per creature)
 //
 // Both buffers live inside the WASM linear memory. The JS side obtains a
 // pointer + length and builds a typed-array *view* – zero-copy.
@@ -65,6 +107,7 @@ pub struct Universe {
     cells: Vec<u8>,
     life: Vec<u8>,
     pixels: Vec<u8>,
+    creatures: Vec<f32>,
 }
 
 #[wasm_bindgen]
@@ -80,6 +123,7 @@ impl Universe {
             cells: vec![EMPTY; size],
             life: vec![0; size],
             pixels: vec![0; size * 4],
+            creatures: Vec::new(),
         }
     }
 
@@ -106,6 +150,16 @@ impl Universe {
         self.pixels.len()
     }
 
+    // -- Creature buffer pointers ------------------------------------------
+
+    pub fn creatures_ptr(&self) -> *const f32 {
+        self.creatures.as_ptr()
+    }
+
+    pub fn creatures_count(&self) -> usize {
+        self.creatures.len() / CREATURE_STRIDE
+    }
+
     // -- Painting -----------------------------------------------------------
 
     /// Paint a circle of `radius` cells centred on (cx, cy).
@@ -126,11 +180,30 @@ impl Universe {
                         FIRE => FIRE_MAX_LIFE,
                         SMOKE => SMOKE_MAX_LIFE,
                         STEAM => STEAM_MAX_LIFE,
+                        SEED => 0, // germination counter starts at 0
                         _ => 0,
                     };
                 }
             }
         }
+    }
+
+    // -- Creature spawning --------------------------------------------------
+
+    /// Spawn a creature at grid coordinates (gx, gy).
+    /// `species`: 0 = Rabbit, 1 = Fish, 2 = Bird.
+    pub fn spawn_creature(&mut self, gx: f32, gy: f32, species: u8) {
+        let sp = match species {
+            0 => SPECIES_RABBIT,
+            1 => SPECIES_FISH,
+            2 => SPECIES_BIRD,
+            _ => return,
+        };
+        self.creatures.push(gx);
+        self.creatures.push(gy);
+        self.creatures.push(sp);
+        self.creatures.push(MAX_ENERGY);
+        self.creatures.push(STATE_IDLE);
     }
 
     // -- Simulation ---------------------------------------------------------
@@ -162,10 +235,16 @@ impl Universe {
                     SMOKE => self.tick_gas(x, y, w, h, &mut rng, SMOKE),
                     STEAM => self.tick_gas(x, y, w, h, &mut rng, STEAM),
                     PLANT => self.tick_plant(x, y, w, h, &mut rng),
+                    SOIL => self.tick_soil(x, y, w, h),
+                    SEED => self.tick_seed(x, y, w, h, &mut rng),
+                    FRUIT => self.tick_fruit(x, y, w, h),
                     _ => {}
                 }
             }
         }
+
+        // Update creatures after the grid tick.
+        self.update_creatures();
     }
 
     // -- Render pixels ------------------------------------------------------
@@ -182,6 +261,9 @@ impl Universe {
             self.pixels[p + 2] = rgba[2];
             self.pixels[p + 3] = rgba[3];
         }
+
+        // Draw creatures on top of the grid.
+        self.render_creatures();
     }
 
     // -- Reset --------------------------------------------------------------
@@ -189,6 +271,7 @@ impl Universe {
     pub fn clear(&mut self) {
         self.cells.fill(EMPTY);
         self.life.fill(0);
+        self.creatures.clear();
     }
 }
 
@@ -248,6 +331,121 @@ impl Universe {
         }
 
         // Try diagonal down-left / down-right (random order).
+        let try_left_first: bool = rand::rng().random();
+        let (dx1, dx2) = if try_left_first { (-1, 1) } else { (1, -1) };
+
+        for dx in [dx1, dx2] {
+            let nx = x + dx;
+            if self.in_bounds(nx, y + 1) {
+                let diag = self.get(nx, y + 1);
+                if diag == EMPTY || diag == WATER {
+                    self.swap(x, y, nx, y + 1);
+                    return;
+                }
+            }
+        }
+    }
+
+    // -- Soil physics (like sand, darker) -----------------------------------
+
+    fn tick_soil(&mut self, x: i32, y: i32, _w: i32, h: i32) {
+        if y + 1 >= h {
+            return;
+        }
+
+        let below = self.get(x, y + 1);
+
+        if below == EMPTY {
+            self.swap(x, y, x, y + 1);
+            return;
+        }
+
+        if below == WATER {
+            self.swap(x, y, x, y + 1);
+            return;
+        }
+
+        let try_left_first: bool = rand::rng().random();
+        let (dx1, dx2) = if try_left_first { (-1, 1) } else { (1, -1) };
+
+        for dx in [dx1, dx2] {
+            let nx = x + dx;
+            if self.in_bounds(nx, y + 1) {
+                let diag = self.get(nx, y + 1);
+                if diag == EMPTY || diag == WATER {
+                    self.swap(x, y, nx, y + 1);
+                    return;
+                }
+            }
+        }
+    }
+
+    // -- Seed germination ---------------------------------------------------
+
+    fn tick_seed(&mut self, x: i32, y: i32, _w: i32, h: i32, rng: &mut impl Rng) {
+        // Seeds fall like sand first.
+        if y + 1 < h {
+            let below = self.get(x, y + 1);
+            if below == EMPTY {
+                self.swap(x, y, x, y + 1);
+                return;
+            }
+            if below == WATER {
+                self.swap(x, y, x, y + 1);
+                return;
+            }
+        }
+
+        // If resting on SOIL, increment germination counter.
+        if y + 1 < h && self.get(x, y + 1) == SOIL {
+            let i = self.idx(x, y);
+            // Also require water nearby for germination.
+            let has_water = self.find_neighbour(x, y, WATER).is_some();
+            if has_water {
+                if self.life[i] >= SEED_GERMINATE_TICKS {
+                    // Germinate! Become a plant.
+                    self.set(x, y, PLANT, 0);
+                } else {
+                    self.life[i] = self.life[i].saturating_add(1);
+                }
+            }
+        } else {
+            // Not on soil – small random chance to still try diagonals.
+            let try_left_first: bool = rng.random();
+            let (dx1, dx2) = if try_left_first { (-1, 1) } else { (1, -1) };
+            for dx in [dx1, dx2] {
+                let nx = x + dx;
+                if y + 1 < h && self.in_bounds(nx, y + 1) {
+                    let diag = self.get(nx, y + 1);
+                    if diag == EMPTY || diag == WATER {
+                        self.swap(x, y, nx, y + 1);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    // -- Fruit physics (falls like sand) ------------------------------------
+
+    fn tick_fruit(&mut self, x: i32, y: i32, _w: i32, h: i32) {
+        if y + 1 >= h {
+            return;
+        }
+
+        let below = self.get(x, y + 1);
+
+        if below == EMPTY {
+            self.swap(x, y, x, y + 1);
+            return;
+        }
+
+        if below == WATER {
+            self.swap(x, y, x, y + 1);
+            return;
+        }
+
+        // Try diagonal.
         let try_left_first: bool = rand::rng().random();
         let (dx1, dx2) = if try_left_first { (-1, 1) } else { (1, -1) };
 
@@ -331,7 +529,7 @@ impl Universe {
             let neighbour = self.get(nx, ny);
 
             match neighbour {
-                // Extinguish: fire + water → smoke + steam
+                // Extinguish: fire + water -> smoke + steam
                 WATER => {
                     self.set(x, y, SMOKE, SMOKE_MAX_LIFE);
                     self.set(nx, ny, STEAM, STEAM_MAX_LIFE);
@@ -356,9 +554,31 @@ impl Universe {
         }
     }
 
-    // -- Plant growth -------------------------------------------------------
+    // -- Plant growth & fruiting --------------------------------------------
 
     fn tick_plant(&mut self, x: i32, y: i32, _w: i32, _h: i32, rng: &mut impl Rng) {
+        let i = self.idx(x, y);
+
+        // Increment maturity counter.
+        self.life[i] = self.life[i].saturating_add(1);
+
+        // Fruiting: mature plants have a low chance to spawn a FRUIT adjacent.
+        if self.life[i] >= PLANT_MATURITY {
+            // 0.5% chance per tick to fruit.
+            if rng.random_range(0u32..200) == 0 {
+                // Try to place fruit in an adjacent empty cell.
+                let fruit_dirs: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+                for (dx, dy) in fruit_dirs {
+                    let nx = x + dx;
+                    let ny = y + dy;
+                    if self.in_bounds(nx, ny) && self.get(nx, ny) == EMPTY {
+                        self.set(nx, ny, FRUIT, 0);
+                        break;
+                    }
+                }
+            }
+        }
+
         // Plants grow only if touching water.
         let water_neighbour = self.find_neighbour(x, y, WATER);
         if water_neighbour.is_none() {
@@ -432,5 +652,296 @@ impl Universe {
             }
         }
         None
+    }
+
+    // -----------------------------------------------------------------------
+    // Creature AI
+    // -----------------------------------------------------------------------
+
+    fn update_creatures(&mut self) {
+        let w = self.width as i32;
+        let h = self.height as i32;
+        let mut rng = rand::rng();
+
+        // We need to process each creature, potentially removing dead ones.
+        let mut i = 0;
+        while i < self.creatures.len() / CREATURE_STRIDE {
+            let base = i * CREATURE_STRIDE;
+            let species = self.creatures[base + 2];
+            let energy = self.creatures[base + 3];
+
+            // Drain energy.
+            let new_energy = energy - ENERGY_DRAIN;
+            if new_energy <= 0.0 {
+                // Creature dies – swap-remove it.
+                let current_count = self.creatures.len() / CREATURE_STRIDE;
+                let last_base = (current_count - 1) * CREATURE_STRIDE;
+                if base != last_base {
+                    for k in 0..CREATURE_STRIDE {
+                        self.creatures[base + k] = self.creatures[last_base + k];
+                    }
+                }
+                self.creatures.truncate(self.creatures.len() - CREATURE_STRIDE);
+                // Don't increment i; re-check what moved into this slot.
+                continue;
+            }
+
+            self.creatures[base + 3] = new_energy;
+
+            if species == SPECIES_RABBIT {
+                self.tick_rabbit(base, w, h, &mut rng);
+            } else if species == SPECIES_FISH {
+                self.tick_fish(base, w, h, &mut rng);
+            } else {
+                self.tick_bird(base, w, h, &mut rng);
+            }
+
+            i += 1;
+        }
+    }
+
+    fn tick_rabbit(&mut self, base: usize, w: i32, h: i32, rng: &mut impl Rng) {
+        let mut x = self.creatures[base];
+        let mut y = self.creatures[base + 1];
+        let gx = x as i32;
+        let gy = y as i32;
+
+        // --- Eating: check for PLANT or FRUIT at current position or adjacent ---
+        let eat_dirs: [(i32, i32); 5] = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)];
+        let mut ate = false;
+        for (dx, dy) in eat_dirs {
+            let nx = gx + dx;
+            let ny = gy + dy;
+            if self.in_bounds(nx, ny) {
+                let cell = self.get(nx, ny);
+                if cell == PLANT || cell == FRUIT {
+                    self.set(nx, ny, EMPTY, 0);
+                    self.creatures[base + 3] =
+                        (self.creatures[base + 3] + ENERGY_FROM_FOOD).min(MAX_ENERGY);
+                    self.creatures[base + 4] = STATE_EATING;
+                    ate = true;
+                    break;
+                }
+            }
+        }
+
+        if ate {
+            return;
+        }
+
+        // --- Gravity: fall if nothing solid below ---
+        let below_y = gy + 1;
+        if below_y < h {
+            if !self.in_bounds(gx, below_y) || !is_solid(self.get(gx, below_y)) {
+                y += 1.0;
+                self.creatures[base + 1] = y.min((h - 1) as f32);
+                self.creatures[base + 4] = STATE_MOVING;
+                return;
+            }
+        }
+
+        // --- Walking: move horizontally ---
+        let dir: i32 = if rng.random::<bool>() { 1 } else { -1 };
+        let nx = gx + dir;
+
+        if self.in_bounds(nx, gy) {
+            let ahead = self.get(nx, gy);
+            if !is_solid(ahead) {
+                // Path is clear (EMPTY or WATER), walk.
+                x += dir as f32;
+                self.creatures[base] = x.clamp(0.0, (w - 1) as f32);
+                self.creatures[base + 4] = STATE_MOVING;
+            } else {
+                // Hit a wall – try to jump (move up 1-2 cells).
+                if self.in_bounds(nx, gy - 1) && !is_solid(self.get(nx, gy - 1)) {
+                    // Can jump over 1-high wall.
+                    x += dir as f32;
+                    y -= 1.0;
+                    self.creatures[base] = x.clamp(0.0, (w - 1) as f32);
+                    self.creatures[base + 1] = y.max(0.0);
+                    self.creatures[base + 4] = STATE_MOVING;
+                } else if self.in_bounds(nx, gy - 2)
+                    && !is_solid(self.get(nx, gy - 2))
+                    && self.in_bounds(gx, gy - 1)
+                    && !is_solid(self.get(gx, gy - 1))
+                {
+                    // Jump over 2-high wall.
+                    x += dir as f32;
+                    y -= 2.0;
+                    self.creatures[base] = x.clamp(0.0, (w - 1) as f32);
+                    self.creatures[base + 1] = y.max(0.0);
+                    self.creatures[base + 4] = STATE_MOVING;
+                } else {
+                    self.creatures[base + 4] = STATE_IDLE;
+                }
+            }
+        } else {
+            self.creatures[base + 4] = STATE_IDLE;
+        }
+    }
+
+    fn tick_fish(&mut self, base: usize, _w: i32, h: i32, rng: &mut impl Rng) {
+        let x = self.creatures[base];
+        let y = self.creatures[base + 1];
+        let gx = x as i32;
+        let gy = y as i32;
+
+        // Fish MUST be in water. If current cell isn't water, take damage.
+        if !self.in_bounds(gx, gy) || self.get(gx, gy) != WATER {
+            // Rapid energy drain when out of water.
+            self.creatures[base + 3] -= 2.0;
+            self.creatures[base + 4] = STATE_IDLE;
+
+            // Try to fall back into water (gravity).
+            if gy + 1 < h && self.in_bounds(gx, gy + 1) && self.get(gx, gy + 1) == WATER {
+                self.creatures[base + 1] = (gy + 1) as f32;
+            }
+            return;
+        }
+
+        // --- Eating: check for PLANT or FRUIT nearby ---
+        let eat_dirs: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+        for (dx, dy) in eat_dirs {
+            let nx = gx + dx;
+            let ny = gy + dy;
+            if self.in_bounds(nx, ny) {
+                let cell = self.get(nx, ny);
+                if cell == PLANT || cell == FRUIT {
+                    self.set(nx, ny, EMPTY, 0);
+                    self.creatures[base + 3] =
+                        (self.creatures[base + 3] + ENERGY_FROM_FOOD).min(MAX_ENERGY);
+                    self.creatures[base + 4] = STATE_EATING;
+                    return;
+                }
+            }
+        }
+
+        // --- Swimming: move in a random cardinal direction, but ONLY into water ---
+        let dirs: [(i32, i32); 4] = [(-1, 0), (1, 0), (0, -1), (0, 1)];
+        let start = rng.random_range(0usize..4);
+        for offset in 0..4 {
+            let (dx, dy) = dirs[(start + offset) % 4];
+            let nx = gx + dx;
+            let ny = gy + dy;
+            if self.in_bounds(nx, ny) && self.get(nx, ny) == WATER {
+                self.creatures[base] = nx as f32;
+                self.creatures[base + 1] = ny as f32;
+                self.creatures[base + 4] = STATE_MOVING;
+                return;
+            }
+        }
+
+        // Stuck – stay idle.
+        self.creatures[base + 4] = STATE_IDLE;
+    }
+
+    fn tick_bird(&mut self, base: usize, _w: i32, h: i32, rng: &mut impl Rng) {
+        let x = self.creatures[base];
+        let y = self.creatures[base + 1];
+        let gx = x as i32;
+        let gy = y as i32;
+
+        // --- Eating: check for PLANT or FRUIT at or adjacent to position ---
+        let eat_dirs: [(i32, i32); 5] = [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)];
+        for (dx, dy) in eat_dirs {
+            let nx = gx + dx;
+            let ny = gy + dy;
+            if self.in_bounds(nx, ny) {
+                let cell = self.get(nx, ny);
+                if cell == PLANT || cell == FRUIT {
+                    self.set(nx, ny, EMPTY, 0);
+                    self.creatures[base + 3] =
+                        (self.creatures[base + 3] + ENERGY_FROM_FOOD).min(MAX_ENERGY);
+                    self.creatures[base + 4] = STATE_EATING;
+                    return;
+                }
+            }
+        }
+
+        // --- Flying: random wander through EMPTY space ---
+        // Birds have a slight upward bias (they prefer to fly).
+        let dx: i32 = rng.random_range(-1i32..=1);
+        let dy: i32 = if rng.random_range(0u32..3) == 0 { 1 } else { -1 }; // upward bias
+
+        // Occasionally rest: 5% chance to try to land on a surface.
+        if rng.random_range(0u32..20) == 0 {
+            // Try to rest by moving down onto solid ground.
+            if gy + 1 < h && self.in_bounds(gx, gy + 1) && is_solid(self.get(gx, gy + 1)) {
+                self.creatures[base + 4] = STATE_IDLE;
+                return;
+            }
+        }
+
+        let nx = gx + dx;
+        let ny = gy + dy;
+        if self.in_bounds(nx, ny) {
+            let target = self.get(nx, ny);
+            if target == EMPTY {
+                self.creatures[base] = nx as f32;
+                self.creatures[base + 1] = ny as f32;
+                self.creatures[base + 4] = STATE_MOVING;
+                return;
+            }
+        }
+
+        // If blocked, try another direction.
+        let fallback_dx = -dx;
+        let fallback_dy = -dy;
+        let fbx = gx + fallback_dx;
+        let fby = gy + fallback_dy;
+        if self.in_bounds(fbx, fby) && self.get(fbx, fby) == EMPTY {
+            self.creatures[base] = fbx as f32;
+            self.creatures[base + 1] = fby as f32;
+            self.creatures[base + 4] = STATE_MOVING;
+        } else {
+            self.creatures[base + 4] = STATE_IDLE;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Creature rendering (drawn on top of the cell grid)
+    // -----------------------------------------------------------------------
+
+    fn render_creatures(&mut self) {
+        let w = self.width as i32;
+        let count = self.creatures.len() / CREATURE_STRIDE;
+
+        for i in 0..count {
+            let base = i * CREATURE_STRIDE;
+            let cx = self.creatures[base] as i32;
+            let cy = self.creatures[base + 1] as i32;
+            let species = self.creatures[base + 2];
+            let rgba = creature_colour(species);
+
+            // Draw a 2x2 block for each creature.
+            for dy in 0..2i32 {
+                for dx in 0..2i32 {
+                    let px = cx + dx;
+                    let py = cy + dy;
+                    if px >= 0 && px < self.width as i32 && py >= 0 && py < self.height as i32 {
+                        let p = ((py * w + px) as usize) * 4;
+                        self.pixels[p] = rgba[0];
+                        self.pixels[p + 1] = rgba[1];
+                        self.pixels[p + 2] = rgba[2];
+                        self.pixels[p + 3] = rgba[3];
+                    }
+                }
+            }
+
+            // Draw a 1-pixel eye to give the creature character.
+            let eye_x = cx;
+            let eye_y = cy;
+            if eye_x >= 0
+                && eye_x < self.width as i32
+                && eye_y >= 0
+                && eye_y < self.height as i32
+            {
+                let p = ((eye_y * w + eye_x) as usize) * 4;
+                self.pixels[p] = 0x10;
+                self.pixels[p + 1] = 0x10;
+                self.pixels[p + 2] = 0x10;
+                self.pixels[p + 3] = 0xFF;
+            }
+        }
     }
 }

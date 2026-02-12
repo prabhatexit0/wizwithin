@@ -21,7 +21,10 @@ declare module "@sand_engine" {
     height(): number;
     pixels_ptr(): number;
     pixels_len(): number;
+    creatures_ptr(): number;
+    creatures_count(): number;
     paint(cx: number, cy: number, cell_type: number, radius: number): void;
+    spawn_creature(gx: number, gy: number, species: number): void;
     tick(): void;
     render(): void;
     clear(): void;
