@@ -21,7 +21,7 @@ const PLANT = 7;
 // STEAM = 8  (not paintable)
 const SOIL = 9;
 const SEED = 10;
-const FRUIT = 11;
+// FRUIT = 11  (not paintable — spawned by mature plants)
 
 // Spawn creature species codes (passed to spawn_creature)
 const SPAWN_RABBIT = 100;
