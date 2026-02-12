@@ -1,6 +1,6 @@
 # wizwithin
 
-go try it now: wizwithin.com
+go try it now: [wizwithin.com](https://wizwithin.com)
 
 This project is being built using my mobile phone using claude app :p
 
