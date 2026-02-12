@@ -6,6 +6,7 @@ import FlockSim from "./components/FlockSim";
 import Chip8Console from "./components/Chip8Console";
 import SynthLab from "./components/SynthLab";
 import Raycaster from "./components/Raycaster";
+import EvolutionLab from "./components/EvolutionLab";
 
 interface MicroApp {
   slug: string;
@@ -71,6 +72,14 @@ const APPS: MicroApp[] = [
       "Wolfenstein-style 2.5D maze explorer — DDA raycasting in Rust/WASM with psychedelic procedural walls.",
     component: Raycaster,
     color: "#e879f9",
+  },
+  {
+    slug: "evolution",
+    title: "Darwin's Blobs",
+    description:
+      "Evolutionary soft-body simulation — 100 spring creatures learn to walk via genetic algorithm in Rust/WASM.",
+    component: EvolutionLab,
+    color: "#86efac",
   },
 ];
 
