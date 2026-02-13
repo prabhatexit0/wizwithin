@@ -45,12 +45,16 @@ export default defineConfig({
         __dirname,
         "../crates/physics_engine/pkg",
       ),
+      "@blast_lab": path.resolve(
+        __dirname,
+        "../crates/blast_lab/pkg",
+      ),
     },
   },
   build: {
     target: "esnext",
   },
   optimizeDeps: {
-    exclude: ["@snake_engine", "@sand_engine", "@fractal_engine", "@boid_engine", "@chip8_core", "@synth_engine", "@raycaster_engine", "@evolution_engine", "@physics_engine"],
+    exclude: ["@snake_engine", "@sand_engine", "@fractal_engine", "@boid_engine", "@chip8_core", "@synth_engine", "@raycaster_engine", "@evolution_engine", "@physics_engine", "@blast_lab"],
   },
 });

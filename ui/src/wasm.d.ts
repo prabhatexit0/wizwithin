@@ -182,6 +182,35 @@ declare module "@physics_engine" {
   }
 }
 
+declare module "@blast_lab" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class BlastLabSim {
+    constructor(width: number, height: number);
+    free(): void;
+    width(): number;
+    height(): number;
+    pixels_ptr(): number;
+    pixels_len(): number;
+    paint(cx: number, cy: number, material: number, radius: number): void;
+    place_bomb(x: number, y: number, bomb_type: number): void;
+    clear_bombs(): void;
+    detonate_all(): void;
+    tick(): void;
+    render(): void;
+    clear(): void;
+    cell_at(x: number, y: number): number;
+    bomb_count(): number;
+    stats_peak_kinetic(): number;
+    stats_peak_temp(): number;
+    stats_pixels_destroyed(): number;
+  }
+}
+
 declare module "@fractal_engine" {
   interface InitOutput {
     readonly memory: WebAssembly.Memory;
