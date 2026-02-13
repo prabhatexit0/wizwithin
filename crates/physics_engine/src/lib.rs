@@ -519,8 +519,8 @@ impl PhysicsWorld {
             height,
             gravity: 600.0,
             color_idx: 0,
-            linear_damping: 0.01,
-            angular_damping: 0.02,
+            linear_damping: 0.5,
+            angular_damping: 2.0,
             restitution: 0.6,
             dragged_body: None,
         };
@@ -673,9 +673,13 @@ impl PhysicsWorld {
                 body.angular_vel *= 0.9;
             }
 
-            // Damping (friction with air)
-            body.vel = body.vel * (1.0 - linear_damping);
-            body.angular_vel *= 1.0 - angular_damping;
+            // Damping (friction with air) — time-dependent so it doesn't
+            // scale with sub-step count.  exp(-rate * dt) is exact for
+            // exponential decay; with rate=0.5 → ~40% loss per second.
+            let lin_damp = (-linear_damping * dt).exp();
+            let ang_damp = (-angular_damping * dt).exp();
+            body.vel = body.vel * lin_damp;
+            body.angular_vel *= ang_damp;
         }
 
         // --- Integration ---
