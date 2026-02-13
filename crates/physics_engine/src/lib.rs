@@ -431,7 +431,7 @@ fn resolve(bodies: &mut [Body], contact: &Contact) {
         + ra_cross_n * ra_cross_n * bodies[a].inv_inertia
         + rb_cross_n * rb_cross_n * bodies[b].inv_inertia;
 
-    let e = (bodies[a].restitution * bodies[b].restitution).min(1.0);
+    let e = bodies[a].restitution.max(bodies[b].restitution);
     let j = -(1.0 + e) * contact_vel / denom;
 
     // Apply normal impulse
@@ -534,7 +534,7 @@ impl PhysicsWorld {
     }
 
     fn add_static_rect(&mut self, x: f32, y: f32, w: f32, h: f32) {
-        let mut body = Body::new(x, y, Shape::Rect { half_w: w * 0.5, half_h: h * 0.5 }, 0.0, 0.3, 0.6);
+        let mut body = Body::new(x, y, Shape::Rect { half_w: w * 0.5, half_h: h * 0.5 }, 0.0, 0.5, 0.6);
         body.is_static = true;
         self.bodies.push(body);
     }
@@ -554,7 +554,7 @@ impl PhysicsWorld {
             x, y,
             Shape::Rect { half_w: w * 0.5, half_h: h * 0.5 },
             mass.max(0.1),
-            0.3,
+            0.5,
             0.5,
         ));
     }
@@ -568,7 +568,7 @@ impl PhysicsWorld {
             x, y,
             Shape::Circle { radius },
             mass.max(0.1),
-            0.4,
+            0.7,
             0.4,
         ));
     }
