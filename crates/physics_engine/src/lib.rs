@@ -217,13 +217,16 @@ fn collide_circle_rect(
         } else {
             (Vec2::new(0.0, if local_y < 0.0 { -1.0 } else { 1.0 }), pen_y + radius)
         };
-        // Transform normal back to world
-        let normal = Vec2::new(
+        // Transform to world space — points from rect surface toward circle
+        let phys_normal = Vec2::new(
             local_normal.x * c - local_normal.y * s,
             local_normal.x * s + local_normal.y * c,
         );
-        let normal = if flip { -normal } else { normal };
-        let contact_point = circle.pos - normal * (radius - depth * 0.5);
+        // Contact point: on circle surface toward rect
+        let contact_point = circle.pos - phys_normal * (radius - depth * 0.5);
+        // Flip for Contact convention: normal must point from Contact.a to Contact.b
+        // phys_normal points rect→circle; non-flip: a=circle,b=rect so negate; flip: a=rect,b=circle so keep
+        let normal = if flip { phys_normal } else { -phys_normal };
         return Some(Contact {
             a: if flip { ri } else { ci },
             b: if flip { ci } else { ri },
@@ -237,12 +240,15 @@ fn collide_circle_rect(
     let local_normal = Vec2::new(dx / dist, dy / dist);
     let depth = radius - dist;
 
-    let normal = Vec2::new(
+    // Transform to world space — points from rect surface toward circle
+    let phys_normal = Vec2::new(
         local_normal.x * c - local_normal.y * s,
         local_normal.x * s + local_normal.y * c,
     );
-    let normal = if flip { -normal } else { normal };
-    let contact_point = circle.pos - normal * (radius - depth * 0.5);
+    // Contact point: on circle surface toward rect
+    let contact_point = circle.pos - phys_normal * (radius - depth * 0.5);
+    // Flip for Contact convention (same logic as above)
+    let normal = if flip { phys_normal } else { -phys_normal };
 
     Some(Contact {
         a: if flip { ri } else { ci },
@@ -278,6 +284,15 @@ fn project_corners(corners: &[Vec2; 4], axis: Vec2) -> (f32, f32) {
         if p > max_p { max_p = p; }
     }
     (min_p, max_p)
+}
+
+fn point_in_obb(p: Vec2, body: &Body, hw: f32, hh: f32) -> bool {
+    let d = p - body.pos;
+    let c = body.angle.cos();
+    let s = body.angle.sin();
+    let lx = d.x * c + d.y * s;
+    let ly = -d.x * s + d.y * c;
+    lx.abs() <= hw && ly.abs() <= hh
 }
 
 fn collide_rect_rect(
@@ -321,10 +336,33 @@ fn collide_rect_rect(
     let ab = b.pos - a.pos;
     let normal = if ab.dot(best_axis) < 0.0 { -best_axis } else { best_axis };
 
-    let contact_point = Vec2::new(
-        (a.pos.x + b.pos.x) * 0.5,
-        (a.pos.y + b.pos.y) * 0.5,
-    );
+    // Contact point: average of all corners that penetrate into the other body.
+    // This gives a proper contact surface for face-face contacts (e.g. box on floor).
+    let mut cp = Vec2::default();
+    let mut cp_count = 0;
+
+    for &c in &corners_a {
+        if point_in_obb(c, b, bhw, bhh) {
+            cp = cp + c;
+            cp_count += 1;
+        }
+    }
+    for &c in &corners_b {
+        if point_in_obb(c, a, ahw, ahh) {
+            cp = cp + c;
+            cp_count += 1;
+        }
+    }
+
+    let contact_point = if cp_count > 0 {
+        cp * (1.0 / cp_count as f32)
+    } else {
+        // Fallback: midpoint (rare edge-edge case)
+        Vec2::new(
+            (a.pos.x + b.pos.x) * 0.5,
+            (a.pos.y + b.pos.y) * 0.5,
+        )
+    };
 
     Some(Contact {
         a: ia,
