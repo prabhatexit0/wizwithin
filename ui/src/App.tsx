@@ -7,6 +7,7 @@ import Chip8Console from "./components/Chip8Console";
 import SynthLab from "./components/SynthLab";
 import Raycaster from "./components/Raycaster";
 import EvolutionLab from "./components/EvolutionLab";
+import PhysicsLab from "./components/PhysicsLab";
 
 interface MicroApp {
   slug: string;
@@ -80,6 +81,14 @@ const APPS: MicroApp[] = [
       "Evolutionary soft-body simulation — 100 spring creatures learn to walk via genetic algorithm in Rust/WASM.",
     component: EvolutionLab,
     color: "#86efac",
+  },
+  {
+    slug: "physics",
+    title: "Newton's Crate",
+    description:
+      "2D rigid-body physics — impulse collision, friction & momentum computed in Rust/WASM with touch drag-and-throw.",
+    component: PhysicsLab,
+    color: "#f59e0b",
   },
 ];
 

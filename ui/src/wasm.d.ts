@@ -156,6 +156,32 @@ declare module "@evolution_engine" {
   }
 }
 
+declare module "@physics_engine" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class PhysicsWorld {
+    constructor(width: number, height: number);
+    free(): void;
+    spawn_box(x: number, y: number, w: number, h: number): void;
+    spawn_circle(x: number, y: number, radius: number): void;
+    body_count(): number;
+    set_gravity(g: number): void;
+    set_restitution(r: number): void;
+    clear_dynamic(): void;
+    start_drag(px: number, py: number): void;
+    move_drag(px: number, py: number): void;
+    end_drag(): void;
+    step(dt: number): void;
+    fill_render_buf(): void;
+    render_ptr(): number;
+    render_len(): number;
+  }
+}
+
 declare module "@fractal_engine" {
   interface InitOutput {
     readonly memory: WebAssembly.Memory;
