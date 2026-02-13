@@ -32,6 +32,9 @@ const ENT_GRENADE: u8 = 0;
 const ENT_MOLOTOV: u8 = 1;
 const ENT_C4: u8 = 2;
 const ENT_MISSILE: u8 = 3;
+const ENT_CLUSTER: u8 = 4;
+const ENT_DYNAMITE: u8 = 5;
+const ENT_NAPALM: u8 = 6;
 
 // Event kinds (must match JS)
 const EVT_EXPLOSION: u8 = 0;
@@ -44,6 +47,10 @@ const EVT_FUSE_TICK: u8 = 4;
 const PREFAB_HOUSE: u8 = 0;
 const PREFAB_TREE: u8 = 1;
 const PREFAB_POND: u8 = 2;
+const PREFAB_BUNKER: u8 = 3;
+const PREFAB_TOWER: u8 = 4;
+const PREFAB_BRIDGE: u8 = 5;
+const PREFAB_WALL: u8 = 6;
 
 // Particle kinds
 const PK_SPARK: u8 = 0;
@@ -145,9 +152,12 @@ impl Entity {
     fn new(kind: u8, x: f32, y: f32, vx: f32, vy: f32) -> Self {
         let fuse = match kind {
             ENT_GRENADE => 3.0,
-            ENT_MOLOTOV => 99.0, // detonates on impact
-            ENT_C4 => 999.0,     // manual detonation
-            ENT_MISSILE => 99.0, // detonates on impact
+            ENT_MOLOTOV => 99.0,  // detonates on impact
+            ENT_C4 => 999.0,      // manual detonation
+            ENT_MISSILE => 99.0,  // detonates on impact
+            ENT_CLUSTER => 2.0,   // shorter fuse, splits into mini-explosions
+            ENT_DYNAMITE => 1.5,  // auto-detonates, very powerful
+            ENT_NAPALM => 99.0,   // detonates on impact
             _ => 1.0,
         };
         Entity { kind, alive: true, x, y, vx, vy, fuse, bounce_count: 0 }
@@ -286,6 +296,10 @@ impl World {
             PREFAB_HOUSE => self.stamp_house(cx, cy),
             PREFAB_TREE => self.stamp_tree(cx, cy),
             PREFAB_POND => self.stamp_pond(cx, cy),
+            PREFAB_BUNKER => self.stamp_bunker(cx, cy),
+            PREFAB_TOWER => self.stamp_tower(cx, cy),
+            PREFAB_BRIDGE => self.stamp_bridge(cx, cy),
+            PREFAB_WALL => self.stamp_wall(cx, cy),
             _ => {}
         }
     }
@@ -484,6 +498,146 @@ impl World {
         }
     }
 
+    fn stamp_bunker(&mut self, cx: i32, cy: i32) {
+        let mut rng = rand::rng();
+        let hw = 15i32;
+        let hh = 12i32;
+
+        // Steel outer walls
+        for y in (cy - hh)..=cy {
+            for x in (cx - hw)..=(cx + hw) {
+                let is_outer = x == cx - hw || x == cx + hw || y == cy - hh || y == cy;
+                if is_outer {
+                    self.set_cell(x, y, STEEL, rng.random_range(0u8..40));
+                }
+            }
+        }
+
+        // Stone interior floor
+        for x in (cx - hw + 1)..(cx + hw) {
+            self.set_cell(x, cy - 1, STONE, rng.random_range(0u8..40));
+        }
+
+        // Firing slit (narrow opening at top)
+        for x in (cx - 4)..=(cx + 4) {
+            self.set_cell(x, cy - hh, EMPTY, 0);
+            self.set_cell(x, cy - hh + 1, GLASS, rng.random_range(0u8..40));
+        }
+
+        // Door opening
+        for y in (cy - 5)..cy {
+            self.set_cell(cx - hw, y, EMPTY, 0);
+        }
+
+        // Thick steel roof
+        for y in (cy - hh - 2)..(cy - hh) {
+            for x in (cx - hw - 1)..=(cx + hw + 1) {
+                self.set_cell(x, y, STEEL, rng.random_range(0u8..40));
+            }
+        }
+    }
+
+    fn stamp_tower(&mut self, cx: i32, cy: i32) {
+        let mut rng = rand::rng();
+        let hw = 6i32;
+        let tower_h = 50i32;
+
+        // Stone walls
+        for y in (cy - tower_h)..cy {
+            for x in (cx - hw)..=(cx + hw) {
+                let is_wall = x == cx - hw || x == cx + hw;
+                let is_window = is_wall && ((cy - y) % 12 >= 5 && (cy - y) % 12 <= 7);
+
+                if is_window {
+                    self.set_cell(x, y, GLASS, rng.random_range(0u8..40));
+                } else if is_wall {
+                    self.set_cell(x, y, STONE, rng.random_range(0u8..40));
+                }
+            }
+        }
+
+        // Wooden floors between levels
+        for level in 0..4 {
+            let floor_y = cy - level * 12 - 1;
+            if floor_y < cy - tower_h { break; }
+            for x in (cx - hw)..=(cx + hw) {
+                self.set_cell(x, floor_y, WOOD, rng.random_range(0u8..40));
+            }
+        }
+
+        // Crenellations at top
+        let top_y = cy - tower_h;
+        for x in (cx - hw - 2)..=(cx + hw + 2) {
+            let is_merlon = (x - (cx - hw - 2)) % 3 != 1;
+            if is_merlon {
+                for dy in 1..=3 {
+                    self.set_cell(x, top_y - dy, STONE, rng.random_range(0u8..40));
+                }
+            }
+            self.set_cell(x, top_y, STONE, rng.random_range(0u8..40));
+        }
+
+        // Foundation
+        for x in (cx - hw - 1)..=(cx + hw + 1) {
+            self.set_cell(x, cy, STONE, rng.random_range(0u8..40));
+            self.set_cell(x, cy + 1, STONE, rng.random_range(0u8..40));
+        }
+    }
+
+    fn stamp_bridge(&mut self, cx: i32, cy: i32) {
+        let mut rng = rand::rng();
+        let half_w = 35i32;
+        let plank_y = cy;
+
+        // Main planks
+        for x in (cx - half_w)..=(cx + half_w) {
+            self.set_cell(x, plank_y, WOOD, rng.random_range(0u8..40));
+            self.set_cell(x, plank_y + 1, WOOD, rng.random_range(0u8..40));
+        }
+
+        // Railings
+        for x in (cx - half_w)..=(cx + half_w) {
+            if (x - (cx - half_w)) % 4 == 0 {
+                for y in (plank_y - 6)..plank_y {
+                    self.set_cell(x, y, WOOD, rng.random_range(0u8..40));
+                }
+            }
+            self.set_cell(x, plank_y - 6, WOOD, rng.random_range(0u8..40));
+        }
+
+        // Stone support pillars
+        for &sx in &[cx - half_w / 2, cx, cx + half_w / 2] {
+            for y in (plank_y + 2)..(plank_y + 25) {
+                for dx in -2..=2i32 {
+                    self.set_cell(sx + dx, y, STONE, rng.random_range(0u8..40));
+                }
+            }
+        }
+    }
+
+    fn stamp_wall(&mut self, cx: i32, cy: i32) {
+        let mut rng = rand::rng();
+        let half_w = 25i32;
+        let wall_h = 20i32;
+
+        // Main wall body
+        for y in (cy - wall_h)..=cy {
+            for x in (cx - half_w)..=(cx + half_w) {
+                self.set_cell(x, y, STONE, rng.random_range(0u8..40));
+            }
+        }
+
+        // Crenellations
+        for x in (cx - half_w)..=(cx + half_w) {
+            let rel = (x - (cx - half_w)) % 5;
+            if rel < 3 {
+                for dy in 1..=3 {
+                    self.set_cell(x, cy - wall_h - dy, STONE, rng.random_range(0u8..40));
+                }
+            }
+        }
+    }
+
     fn set_cell(&mut self, x: i32, y: i32, mat: u8, noise: u8) {
         if !Self::in_bounds(x, y) { return; }
         let idx = Self::idx(x as usize, y as usize);
@@ -505,6 +659,8 @@ impl World {
         let mut rng = rand::rng();
         let mut deferred_explosions: Vec<(f32, f32, f32, f32)> = Vec::new();
         let mut deferred_molotov: Vec<(f32, f32)> = Vec::new();
+        let mut deferred_napalm: Vec<(f32, f32)> = Vec::new();
+        let mut deferred_cluster: Vec<(f32, f32)> = Vec::new();
         let mut deferred_events: Vec<Event> = Vec::new();
 
         for i in 0..self.entities.len() {
@@ -535,7 +691,7 @@ impl World {
                         });
                     }
                 }
-                ENT_C4 => {
+                ENT_C4 | ENT_DYNAMITE => {
                     let below_x = e.x.round() as i32;
                     let below_y = (e.y + 1.0).round() as i32;
                     if !Self::check_solid(&self.grid, below_x, below_y) {
@@ -547,6 +703,7 @@ impl World {
                     }
                 }
                 _ => {
+                    // Grenade, molotov, cluster, napalm: standard arc
                     e.vy += GRAVITY;
                 }
             }
@@ -559,7 +716,7 @@ impl World {
             let gx = new_x.round() as i32;
             let gy = new_y.round() as i32;
 
-            let hit_terrain = if e.kind == ENT_C4 && e.vx.abs() < 0.01 && e.vy.abs() < 0.01 {
+            let hit_terrain = if (e.kind == ENT_C4 || e.kind == ENT_DYNAMITE) && e.vx.abs() < 0.01 && e.vy.abs() < 0.01 {
                 false
             } else {
                 Self::check_solid(&self.grid, gx, gy)
@@ -567,7 +724,8 @@ impl World {
 
             if hit_terrain {
                 match e.kind {
-                    ENT_GRENADE => {
+                    ENT_GRENADE | ENT_CLUSTER => {
+                        // Bounce on impact
                         let speed = (e.vx * e.vx + e.vy * e.vy).sqrt();
                         if speed > 1.5 && e.bounce_count < 5 {
                             let ox = e.x.round() as i32;
@@ -588,11 +746,15 @@ impl World {
                         deferred_molotov.push((e.x, e.y));
                         e.alive = false;
                     }
+                    ENT_NAPALM => {
+                        deferred_napalm.push((e.x, e.y));
+                        e.alive = false;
+                    }
                     ENT_MISSILE => {
                         deferred_explosions.push((e.x, e.y, 120.0, 1.0));
                         e.alive = false;
                     }
-                    ENT_C4 => {
+                    ENT_C4 | ENT_DYNAMITE => {
                         e.vx = 0.0;
                         e.vy = 0.0;
                     }
@@ -608,18 +770,46 @@ impl World {
                 continue;
             }
 
-            if e.kind == ENT_GRENADE && e.alive {
-                e.fuse -= dt;
-
-                let prev = e.fuse + dt;
-                let tick_interval = 0.4;
-                if (prev / tick_interval).floor() > (e.fuse / tick_interval).floor() && e.fuse > 0.0 {
-                    deferred_events.push(Event::new(EVT_FUSE_TICK, e.x, e.y, e.fuse));
-                }
-
-                if e.fuse <= 0.0 {
-                    deferred_explosions.push((e.x, e.y, 100.0, 0.9));
-                    e.alive = false;
+            // Fuse countdowns
+            if e.alive {
+                match e.kind {
+                    ENT_GRENADE => {
+                        e.fuse -= dt;
+                        let prev = e.fuse + dt;
+                        let tick_interval = 0.4;
+                        if (prev / tick_interval).floor() > (e.fuse / tick_interval).floor() && e.fuse > 0.0 {
+                            deferred_events.push(Event::new(EVT_FUSE_TICK, e.x, e.y, e.fuse));
+                        }
+                        if e.fuse <= 0.0 {
+                            deferred_explosions.push((e.x, e.y, 100.0, 0.9));
+                            e.alive = false;
+                        }
+                    }
+                    ENT_CLUSTER => {
+                        e.fuse -= dt;
+                        let prev = e.fuse + dt;
+                        let tick_interval = 0.3;
+                        if (prev / tick_interval).floor() > (e.fuse / tick_interval).floor() && e.fuse > 0.0 {
+                            deferred_events.push(Event::new(EVT_FUSE_TICK, e.x, e.y, e.fuse));
+                        }
+                        if e.fuse <= 0.0 {
+                            deferred_cluster.push((e.x, e.y));
+                            e.alive = false;
+                        }
+                    }
+                    ENT_DYNAMITE => {
+                        e.fuse -= dt;
+                        let prev = e.fuse + dt;
+                        let tick_interval = 0.25;
+                        if (prev / tick_interval).floor() > (e.fuse / tick_interval).floor() && e.fuse > 0.0 {
+                            deferred_events.push(Event::new(EVT_FUSE_TICK, e.x, e.y, e.fuse));
+                        }
+                        if e.fuse <= 0.0 {
+                            deferred_explosions.push((e.x, e.y, 200.0, 1.5));
+                            e.alive = false;
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -635,6 +825,22 @@ impl World {
         // Process deferred molotov shatters
         for (x, y) in deferred_molotov {
             self.shatter_molotov(x, y);
+        }
+
+        // Process deferred napalm strikes
+        for (x, y) in deferred_napalm {
+            self.shatter_napalm(x, y);
+        }
+
+        // Process deferred cluster detonations — ring of mini-explosions
+        for (cx, cy) in deferred_cluster {
+            for i in 0..8u32 {
+                let angle = (i as f32) * std::f32::consts::TAU / 8.0;
+                let r = 25.0;
+                let ex = cx + angle.cos() * r;
+                let ey = cy + angle.sin() * r;
+                self.explode(ex, ey, 50.0, 0.7);
+            }
         }
 
         // Cleanup dead entities
@@ -782,6 +988,60 @@ impl World {
             speed: 2.0, life: 1.0,
             r: 255, g: 100, b: 30,
         });
+    }
+
+    // =====================================================================
+    // Napalm strike → massive fire zone
+    // =====================================================================
+
+    fn shatter_napalm(&mut self, cx: f32, cy: f32) {
+        let mut rng = rand::rng();
+
+        self.events.push(Event::new(EVT_FIRE_IGNITED, cx, cy, 2.0));
+
+        // Scatter fire pixels in a large radius
+        let r = 30i32;
+        for _ in 0..300 {
+            let dx = rng.random_range(-r..=r);
+            let dy = rng.random_range(-r..5);
+            let x = cx as i32 + dx;
+            let y = cy as i32 + dy;
+            if !Self::in_bounds(x, y) { continue; }
+            let idx = Self::idx(x as usize, y as usize);
+            let mat = self.grid[idx].mat;
+            if mat == EMPTY || mat == LEAF || mat == WOOD {
+                self.grid[idx] = Cell {
+                    mat: FIRE,
+                    noise: rng.random_range(0u8..40),
+                    heat: 1.0,
+                    fire_ttl: rng.random_range(80..200),
+                };
+            }
+        }
+
+        // Fire embers
+        for _ in 0..60 {
+            if self.particles.len() >= MAX_PARTICLES { break; }
+            self.particles.push(Particle {
+                x: cx, y: cy,
+                vx: rng.random_range(-3.0f32..3.0),
+                vy: rng.random_range(-4.0f32..-0.5),
+                life: 1.0, decay: rng.random_range(0.01..0.03),
+                kind: PK_EMBER,
+                r: 255, g: rng.random_range(80..200), b: 20,
+            });
+        }
+
+        // Medium shockwave
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 5.0, max_radius: 40.0,
+            speed: 2.5, life: 1.0,
+            r: 255, g: 120, b: 30,
+        });
+
+        // Small explosion to clear terrain at center
+        self.explode(cx, cy, 40.0, 0.5);
     }
 
     // =====================================================================
@@ -1115,6 +1375,15 @@ impl World {
                     ((255.0 * pulse) as u8, (60.0 * pulse) as u8, (40.0 * pulse) as u8, 4i32)
                 }
                 ENT_MISSILE => (255, 200, 80, 3),
+                ENT_CLUSTER => {
+                    let pulse = ((tc as f32 * 0.35).sin() * 0.3 + 0.7).clamp(0.4, 1.0);
+                    ((20.0 * pulse) as u8, (180.0 * pulse) as u8, (220.0 * pulse) as u8, 3i32)
+                }
+                ENT_DYNAMITE => {
+                    let pulse = ((tc as f32 * 0.4).sin() * 0.4 + 0.6).clamp(0.3, 1.0);
+                    ((200.0 * pulse) as u8, (60.0 * pulse) as u8, (30.0 * pulse) as u8, 4i32)
+                }
+                ENT_NAPALM => (255, 160, 30, 3),
                 _ => (255, 255, 255, 2),
             };
 
@@ -1132,17 +1401,18 @@ impl World {
                 }
             }
 
-            // C4 label — crosshair
-            if e.kind == ENT_C4 {
+            // Crosshair indicator for placed explosives
+            if e.kind == ENT_C4 || e.kind == ENT_DYNAMITE {
+                let (cr, cg, cb) = if e.kind == ENT_C4 { (255u8, 40u8, 40u8) } else { (255, 120, 20) };
                 for d in -(size + 2)..=(size + 2) {
                     for &(dx, dy) in &[(d, 0i32), (0, d)] {
                         let sx = px + dx;
                         let sy = py + dy;
                         if !Self::in_bounds(sx, sy) { continue; }
                         let pix = Self::idx(sx as usize, sy as usize) * 4;
-                        self.pixels[pix] = 255;
-                        self.pixels[pix + 1] = 40;
-                        self.pixels[pix + 2] = 40;
+                        self.pixels[pix] = cr;
+                        self.pixels[pix + 1] = cg;
+                        self.pixels[pix + 2] = cb;
                         self.pixels[pix + 3] = 255;
                     }
                 }

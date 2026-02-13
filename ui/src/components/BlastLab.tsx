@@ -11,6 +11,9 @@ const ENT_GRENADE = 0;
 const ENT_MOLOTOV = 1;
 const ENT_C4 = 2;
 const ENT_MISSILE = 3;
+const ENT_CLUSTER = 4;
+const ENT_DYNAMITE = 5;
+const ENT_NAPALM = 6;
 
 // Event kinds
 const EVT_EXPLOSION = 0;
@@ -23,22 +26,33 @@ const EVT_FUSE_TICK = 4;
 const PREFAB_HOUSE = 0;
 const PREFAB_TREE = 1;
 const PREFAB_POND = 2;
+const PREFAB_BUNKER = 3;
+const PREFAB_TOWER = 4;
+const PREFAB_BRIDGE = 5;
+const PREFAB_WALL = 6;
 
 type ToolMode = "build" | "chaos";
 
-type BuildTool = "house" | "tree" | "pond";
-type ChaosTool = "grenade" | "molotov" | "missile" | "c4";
+type BuildTool = "house" | "tree" | "pond" | "bunker" | "tower" | "bridge" | "wall";
+type ChaosTool = "grenade" | "molotov" | "missile" | "c4" | "cluster" | "dynamite" | "napalm";
 
 const BUILD_TOOLS: { id: BuildTool; label: string; prefab: number; color: string; desc: string }[] = [
   { id: "house", label: "House", prefab: PREFAB_HOUSE, color: "#8b5a2b", desc: "Wood walls, stone roof, glass windows" },
   { id: "tree", label: "Tree", prefab: PREFAB_TREE, color: "#4a9e3f", desc: "Wooden trunk with leafy canopy" },
   { id: "pond", label: "Pond", prefab: PREFAB_POND, color: "#3b82f6", desc: "Water pond with dirt rim" },
+  { id: "bunker", label: "Bunker", prefab: PREFAB_BUNKER, color: "#94a3b8", desc: "Steel-reinforced shelter" },
+  { id: "tower", label: "Tower", prefab: PREFAB_TOWER, color: "#a8a29e", desc: "Tall stone watchtower" },
+  { id: "bridge", label: "Bridge", prefab: PREFAB_BRIDGE, color: "#92400e", desc: "Wooden bridge with stone supports" },
+  { id: "wall", label: "Wall", prefab: PREFAB_WALL, color: "#78716c", desc: "Stone fortification wall" },
 ];
 
 const CHAOS_TOOLS: { id: ChaosTool; label: string; kind: number; color: string; desc: string; throwable: boolean }[] = [
   { id: "grenade", label: "Grenade", kind: ENT_GRENADE, color: "#4ade80", desc: "Arcs, bounces, 3s fuse", throwable: true },
   { id: "molotov", label: "Molotov", kind: ENT_MOLOTOV, color: "#f97316", desc: "Arcs, shatters into fire", throwable: true },
-  { id: "missile", label: "Missile", kind: ENT_MISSILE, color: "#fbbf24", desc: "Click direction to fire", throwable: false },
+  { id: "cluster", label: "Cluster", kind: ENT_CLUSTER, color: "#06b6d4", desc: "Splits into 8 explosions", throwable: true },
+  { id: "napalm", label: "Napalm", kind: ENT_NAPALM, color: "#f59e0b", desc: "Massive fire on impact", throwable: true },
+  { id: "missile", label: "Missile", kind: ENT_MISSILE, color: "#fbbf24", desc: "Fires from screen edge", throwable: false },
+  { id: "dynamite", label: "Dynamite", kind: ENT_DYNAMITE, color: "#dc2626", desc: "Place, auto-detonates 1.5s", throwable: false },
   { id: "c4", label: "C4", kind: ENT_C4, color: "#ef4444", desc: "Place, then detonate all", throwable: false },
 ];
 
@@ -454,14 +468,29 @@ export default function BlastLab() {
       const tool = CHAOS_TOOLS.find((t) => t.id === chaosToolRef.current);
       if (!tool) return;
 
-      if (tool.id === "c4") {
-        // Place C4 at click point (slight downward velocity so it falls into place)
-        sim.spawn_entity(ENT_C4, pt[0], pt[1], 0, 0);
+      if (tool.id === "c4" || tool.id === "dynamite") {
+        // Place at click point
+        sim.spawn_entity(tool.kind, pt[0], pt[1], 0, 0);
         playPlaceSound();
       } else if (tool.id === "missile") {
-        // Fire missile from bottom-center toward click point
-        const ox = SIM_W / 2;
-        const oy = SIM_H - 10;
+        // Fire missile from the farthest screen edge toward click point
+        const distTop = pt[1];
+        const distBot = SIM_H - pt[1];
+        const distLeft = pt[0];
+        const distRight = SIM_W - pt[0];
+        const maxDist = Math.max(distTop, distBot, distLeft, distRight);
+
+        let ox: number, oy: number;
+        if (maxDist === distBot) {
+          ox = SIM_W / 2; oy = SIM_H + 5;
+        } else if (maxDist === distTop) {
+          ox = SIM_W / 2; oy = -5;
+        } else if (maxDist === distLeft) {
+          ox = -5; oy = SIM_H / 2;
+        } else {
+          ox = SIM_W + 5; oy = SIM_H / 2;
+        }
+
         const dx = pt[0] - ox;
         const dy = pt[1] - oy;
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -678,9 +707,11 @@ export default function BlastLab() {
             ? "Tap to stamp prefab"
             : chaosTool === "c4"
               ? "Tap to place C4, then Detonate"
-              : chaosTool === "missile"
-                ? "Tap to fire missile toward click"
-                : "Drag to aim, release to throw"
+              : chaosTool === "dynamite"
+                ? "Tap to place — auto-detonates in 1.5s"
+                : chaosTool === "missile"
+                  ? "Tap to fire missile from screen edge"
+                  : "Drag to aim, release to throw"
           }
         </p>
       )}
