@@ -3,8 +3,8 @@ import { useEffect, useRef, useState, useCallback } from "react";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const SIM_W = 400;
-const SIM_H = 300;
+const SIM_W = 640;
+const SIM_H = 400;
 
 // Material IDs (must match Rust constants)
 const EMPTY = 0;
@@ -40,7 +40,6 @@ const BOMB_TOOLS: { id: BombTool; label: string; type: number; color: string; de
 // ---------------------------------------------------------------------------
 
 export default function BlastLab() {
-  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [status, setStatus] = useState<"loading" | "running" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
@@ -88,32 +87,9 @@ export default function BlastLab() {
         const canvas = canvasRef.current!;
         const ctx = canvas.getContext("2d")!;
 
-        function syncCanvasSize() {
-          const container = containerRef.current;
-          if (!container) return;
-          const rect = container.getBoundingClientRect();
-          const dpr = window.devicePixelRatio || 1;
-          const displayW = rect.width;
-          const displayH = (displayW / SIM_W) * SIM_H;
-
-          canvas.style.width = `${displayW}px`;
-          canvas.style.height = `${displayH}px`;
-          canvas.width = Math.round(displayW * dpr);
-          canvas.height = Math.round(displayH * dpr);
-
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.scale(
-            (displayW * dpr) / SIM_W,
-            (displayH * dpr) / SIM_H,
-          );
-        }
-
-        syncCanvasSize();
-
-        const ro = new ResizeObserver(() => {
-          if (!cancelled) syncCanvasSize();
-        });
-        ro.observe(containerRef.current!);
+        // Set canvas buffer to exact sim resolution — CSS scales it up
+        canvas.width = SIM_W;
+        canvas.height = SIM_H;
 
         setStatus("running");
 
@@ -150,7 +126,6 @@ export default function BlastLab() {
 
         rafId = requestAnimationFrame(frame);
 
-        (canvas as any).__roCleanup = () => ro.disconnect();
       } catch (err) {
         if (!cancelled) {
           console.error("Failed to boot blast_lab:", err);
@@ -165,10 +140,6 @@ export default function BlastLab() {
     return () => {
       cancelled = true;
       cancelAnimationFrame(rafId);
-      const canvas = canvasRef.current;
-      if (canvas && (canvas as any).__roCleanup) {
-        (canvas as any).__roCleanup();
-      }
       if (simRef.current) {
         simRef.current.free();
         simRef.current = null;
@@ -369,7 +340,7 @@ export default function BlastLab() {
       )}
 
       {/* Canvas + HUD overlay */}
-      <div ref={containerRef} className="w-full max-w-[800px] relative">
+      <div className="w-full max-w-[960px] relative">
         <canvas
           ref={canvasRef}
           className="rounded-lg border border-zinc-700 bg-zinc-900 w-full"

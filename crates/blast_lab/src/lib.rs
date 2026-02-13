@@ -349,6 +349,12 @@ impl BlastLabSim {
                 }
             }
         }
+
+        // Draw bomb markers on top of the pixel buffer
+        let bombs_snapshot: Vec<PlacedBomb> = self.bombs.clone();
+        for bomb in &bombs_snapshot {
+            self.render_bomb_marker(bomb.x, bomb.y, bomb.bomb_type);
+        }
     }
 
     // -- Reset ---------------------------------------------------------------
@@ -814,6 +820,47 @@ impl BlastLabSim {
         }
 
         self.cells.copy_from_slice(&self.scratch);
+    }
+
+    // -- Bomb marker rendering -----------------------------------------------
+
+    fn render_bomb_marker(&mut self, cx: u32, cy: u32, bomb_type: u8) {
+        let (r, g, b) = match bomb_type {
+            BOMB_C4 => (255u8, 160, 40),       // orange
+            BOMB_THERMITE => (255, 60, 60),     // red
+            BOMB_DIRTY => (60, 255, 80),        // green
+            _ => (255, 255, 255),
+        };
+
+        let w = self.width as i32;
+        let h = self.height as i32;
+        let marker_r = 5i32;
+
+        // Draw a filled circle marker
+        for dy in -marker_r..=marker_r {
+            for dx in -marker_r..=marker_r {
+                let dist_sq = dx * dx + dy * dy;
+                if dist_sq > marker_r * marker_r {
+                    continue;
+                }
+                let px = cx as i32 + dx;
+                let py = cy as i32 + dy;
+                if px < 0 || py < 0 || px >= w || py >= h {
+                    continue;
+                }
+                let pix = (py as usize * self.width as usize + px as usize) * 4;
+
+                // Ring outline: full color; inner: dimmer with crosshair
+                let on_ring = dist_sq > (marker_r - 1) * (marker_r - 1);
+                let on_cross = dx == 0 || dy == 0;
+                if on_ring || on_cross {
+                    self.pixels[pix] = r;
+                    self.pixels[pix + 1] = g;
+                    self.pixels[pix + 2] = b;
+                    self.pixels[pix + 3] = 255;
+                }
+            }
+        }
     }
 
     // -- Per-tick: Heat dissipation ------------------------------------------
