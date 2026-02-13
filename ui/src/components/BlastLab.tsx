@@ -20,6 +20,7 @@ const BOMB_DIRTY = 2;
 
 type DrawTool = "wood" | "stone" | "steel" | "glass" | "eraser";
 type BombTool = "c4" | "thermite" | "dirty";
+type InteractionMode = "draw" | "bomb";
 
 const DRAW_TOOLS: { id: DrawTool; label: string; material: number; color: string }[] = [
   { id: "steel", label: "Steel", material: STEEL, color: "#b4c3d2" },
@@ -45,6 +46,7 @@ export default function BlastLab() {
   const [errorMsg, setErrorMsg] = useState("");
 
   // UI state
+  const [mode, setMode] = useState<InteractionMode>("draw");
   const [drawTool, setDrawTool] = useState<DrawTool>("steel");
   const [bombTool, setBombTool] = useState<BombTool>("c4");
   const [brushSize, setBrushSize] = useState(3);
@@ -58,6 +60,8 @@ export default function BlastLab() {
 
   // Refs for the render loop
   const simRef = useRef<InstanceType<typeof import("@blast_lab").BlastLabSim> | null>(null);
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
   const drawToolRef = useRef(drawTool);
   drawToolRef.current = drawTool;
   const bombToolRef = useRef(bombTool);
@@ -166,7 +170,8 @@ export default function BlastLab() {
   );
 
   // -------------------------------------------------------------------------
-  // Pointer events — left-drag to draw, right-click to place bomb
+  // Pointer events — mode-aware: draw mode paints, bomb mode places bombs
+  // Right-click always places a bomb regardless of mode (desktop shortcut)
   // -------------------------------------------------------------------------
   const isDrawing = useRef(false);
 
@@ -182,15 +187,36 @@ export default function BlastLab() {
     [toSim],
   );
 
+  const placeBombAt = useCallback(
+    (clientX: number, clientY: number) => {
+      const sim = simRef.current;
+      const pt = toSim(clientX, clientY);
+      if (!sim || !pt) return;
+      const bomb = BOMB_TOOLS.find((b) => b.id === bombToolRef.current);
+      if (!bomb) return;
+      sim.place_bomb(pt[0], pt[1], bomb.type);
+      setBombCount(sim.bomb_count());
+    },
+    [toSim],
+  );
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      // Right-click = place bomb
+      // Right-click always places bomb (desktop shortcut)
       if (e.button === 2) return;
+
       (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
-      isDrawing.current = true;
-      paintAt(e.clientX, e.clientY);
+
+      if (modeRef.current === "bomb") {
+        // Bomb mode: single tap places a bomb, no drag
+        placeBombAt(e.clientX, e.clientY);
+      } else {
+        // Draw mode: start painting
+        isDrawing.current = true;
+        paintAt(e.clientX, e.clientY);
+      }
     },
-    [paintAt],
+    [paintAt, placeBombAt],
   );
 
   const onPointerMove = useCallback(
@@ -208,15 +234,9 @@ export default function BlastLab() {
   const onContextMenu = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       e.preventDefault();
-      const sim = simRef.current;
-      const pt = toSim(e.clientX, e.clientY);
-      if (!sim || !pt) return;
-      const bomb = BOMB_TOOLS.find((b) => b.id === bombToolRef.current);
-      if (!bomb) return;
-      sim.place_bomb(pt[0], pt[1], bomb.type);
-      setBombCount(sim.bomb_count());
+      placeBombAt(e.clientX, e.clientY);
     },
-    [toSim],
+    [placeBombAt],
   );
 
   // -------------------------------------------------------------------------
@@ -257,70 +277,100 @@ export default function BlastLab() {
 
       {status === "running" && (
         <>
-          {/* Toolbar */}
+          {/* Mode toggle + tools */}
           <div className="flex flex-wrap justify-center gap-2">
-            {/* Material tools */}
+            {/* Draw / Bomb mode toggle */}
             <div className="flex rounded-lg overflow-hidden border border-zinc-700">
-              {DRAW_TOOLS.map((tool) => (
-                <button
-                  key={tool.id}
-                  onClick={() => setDrawTool(tool.id)}
-                  className={`px-3 py-1.5 text-sm transition-colors cursor-pointer ${
-                    drawTool === tool.id
-                      ? "text-white"
-                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                  }`}
-                  style={
-                    drawTool === tool.id
-                      ? { backgroundColor: tool.color, color: tool.id === "glass" ? "#1a1a2e" : "#fff" }
-                      : undefined
-                  }
-                >
-                  {tool.label}
-                </button>
-              ))}
+              <button
+                onClick={() => setMode("draw")}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
+                  mode === "draw"
+                    ? "bg-sky-600 text-white"
+                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                }`}
+              >
+                Draw
+              </button>
+              <button
+                onClick={() => setMode("bomb")}
+                className={`px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer ${
+                  mode === "bomb"
+                    ? "bg-red-600 text-white"
+                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                }`}
+              >
+                Bomb
+              </button>
             </div>
 
-            {/* Brush size */}
-            <label className="flex items-center gap-2 text-xs text-zinc-400">
-              <span className="shrink-0">Brush</span>
-              <input
-                type="range"
-                min={1}
-                max={12}
-                step={1}
-                value={brushSize}
-                onChange={(e) => setBrushSize(Number(e.target.value))}
-                className="w-16 sm:w-20 accent-zinc-400"
-              />
-              <span className="w-5 tabular-nums text-zinc-500">{brushSize}</span>
-            </label>
+            {/* Material tools (shown in draw mode) */}
+            {mode === "draw" && (
+              <>
+                <div className="flex rounded-lg overflow-hidden border border-zinc-700">
+                  {DRAW_TOOLS.map((tool) => (
+                    <button
+                      key={tool.id}
+                      onClick={() => setDrawTool(tool.id)}
+                      className={`px-3 py-1.5 text-sm transition-colors cursor-pointer ${
+                        drawTool === tool.id
+                          ? "text-white"
+                          : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                      }`}
+                      style={
+                        drawTool === tool.id
+                          ? { backgroundColor: tool.color, color: tool.id === "glass" ? "#1a1a2e" : "#fff" }
+                          : undefined
+                      }
+                    >
+                      {tool.label}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="flex items-center gap-2 text-xs text-zinc-400">
+                  <span className="shrink-0">Brush</span>
+                  <input
+                    type="range"
+                    min={1}
+                    max={12}
+                    step={1}
+                    value={brushSize}
+                    onChange={(e) => setBrushSize(Number(e.target.value))}
+                    className="w-16 sm:w-20 accent-zinc-400"
+                  />
+                  <span className="w-5 tabular-nums text-zinc-500">{brushSize}</span>
+                </label>
+              </>
+            )}
+
+            {/* Bomb tools (shown in bomb mode) */}
+            {mode === "bomb" && (
+              <div className="flex rounded-lg overflow-hidden border border-zinc-700">
+                {BOMB_TOOLS.map((bomb) => (
+                  <button
+                    key={bomb.id}
+                    onClick={() => setBombTool(bomb.id)}
+                    title={bomb.desc}
+                    className={`px-3 py-1.5 text-sm transition-colors cursor-pointer ${
+                      bombTool === bomb.id
+                        ? "text-white"
+                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+                    }`}
+                    style={
+                      bombTool === bomb.id
+                        ? { backgroundColor: bomb.color }
+                        : undefined
+                    }
+                  >
+                    {bomb.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Bomb selector + actions */}
+          {/* Actions row */}
           <div className="flex flex-wrap justify-center gap-2">
-            <div className="flex rounded-lg overflow-hidden border border-zinc-700">
-              {BOMB_TOOLS.map((bomb) => (
-                <button
-                  key={bomb.id}
-                  onClick={() => setBombTool(bomb.id)}
-                  title={bomb.desc}
-                  className={`px-3 py-1.5 text-sm transition-colors cursor-pointer ${
-                    bombTool === bomb.id
-                      ? "text-white"
-                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                  }`}
-                  style={
-                    bombTool === bomb.id
-                      ? { backgroundColor: bomb.color }
-                      : undefined
-                  }
-                >
-                  {bomb.label}
-                </button>
-              ))}
-            </div>
-
             <button
               onClick={handleDetonate}
               disabled={bombCount === 0}
@@ -380,8 +430,9 @@ export default function BlastLab() {
 
       {status === "running" && (
         <p className="text-zinc-500 text-xs text-center px-2">
-          Left-click to draw &middot; Right-click to place bomb &middot;
-          Hit &ldquo;Detonate All&rdquo; and watch the physics
+          {mode === "draw" ? "Tap/click to draw" : "Tap/click to place bomb"} &middot;
+          Right-click always places bomb &middot;
+          Toggle Draw/Bomb mode above
         </p>
       )}
     </div>
