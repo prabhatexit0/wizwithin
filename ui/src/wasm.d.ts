@@ -189,28 +189,26 @@ declare module "@blast_lab" {
 
   export default function init(): Promise<InitOutput>;
 
-  export class BlastLabSim {
-    constructor(width: number, height: number);
+  export class World {
+    constructor();
     free(): void;
     width(): number;
     height(): number;
     pixels_ptr(): number;
     pixels_len(): number;
-    paint(cx: number, cy: number, material: number, radius: number): void;
-    place_bomb(x: number, y: number, bomb_type: number): void;
-    clear_bombs(): void;
-    detonate_all(): void;
+    events_ptr(): number;
+    events_len(): number;
+    events_byte_len(): number;
+    clear_events(): void;
+    entity_count(): number;
+    get_entity_data(): Float32Array;
+    stamp_prefab(cx: number, cy: number, prefab: number): void;
+    spawn_entity(kind: number, x: number, y: number, vx: number, vy: number): void;
+    detonate_c4(): void;
     tick(): void;
     render(): void;
     clear(): void;
     cell_at(x: number, y: number): number;
-    bomb_count(): number;
-    stats_peak_kinetic(): number;
-    stats_peak_temp(): number;
-    stats_pixels_destroyed(): number;
-    stats_total_energy(): number;
-    detonated_mask(): number;
-    particle_count(): number;
   }
 }
 
