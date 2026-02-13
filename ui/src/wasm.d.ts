@@ -170,6 +170,7 @@ declare module "@physics_engine" {
     spawn_circle(x: number, y: number, radius: number): void;
     body_count(): number;
     set_gravity(g: number): void;
+    set_restitution(r: number): void;
     clear_dynamic(): void;
     start_drag(px: number, py: number): void;
     move_drag(px: number, py: number): void;

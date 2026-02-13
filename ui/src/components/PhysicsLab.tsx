@@ -30,6 +30,7 @@ export default function PhysicsLab() {
   const [shapeTool, setShapeTool] = useState<ShapeTool>("box");
   const [sizeIdx, setSizeIdx] = useState(1); // medium
   const [gravity, setGravity] = useState(600);
+  const [bounce, setBounce] = useState(0.6);
 
   // Refs for the render loop (no re-renders!)
   const worldRef = useRef<InstanceType<
@@ -41,6 +42,8 @@ export default function PhysicsLab() {
   sizeIdxRef.current = sizeIdx;
   const gravityRef = useRef(gravity);
   gravityRef.current = gravity;
+  const bounceRef = useRef(bounce);
+  bounceRef.current = bounce;
 
   // -------------------------------------------------------------------------
   // Boot WASM & start render loop
@@ -110,6 +113,7 @@ export default function PhysicsLab() {
           lastTime = now;
 
           world.set_gravity(gravityRef.current);
+          world.set_restitution(bounceRef.current);
           world.step(dt);
           world.fill_render_buf();
 
@@ -359,6 +363,21 @@ export default function PhysicsLab() {
               className="w-20 sm:w-28 accent-emerald-400"
             />
             <span className="w-10 tabular-nums text-zinc-500">{gravity}</span>
+          </label>
+
+          {/* Bounce slider */}
+          <label className="flex items-center gap-2 text-xs text-zinc-400">
+            <span className="shrink-0">Bounce</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={bounce}
+              onChange={(e) => setBounce(Number(e.target.value))}
+              className="w-20 sm:w-28 accent-amber-400"
+            />
+            <span className="w-10 tabular-nums text-zinc-500">{bounce.toFixed(2)}</span>
           </label>
 
           {/* Clear */}

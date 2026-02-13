@@ -398,7 +398,7 @@ fn collide(bodies: &[Body], i: usize, j: usize) -> Option<Contact> {
 // ---------------------------------------------------------------------------
 // Impulse resolution with friction
 // ---------------------------------------------------------------------------
-fn resolve(bodies: &mut [Body], contact: &Contact) {
+fn resolve(bodies: &mut [Body], contact: &Contact, restitution: f32) {
     let Contact { a, b, normal, depth, contact_point } = *contact;
 
     let inv_mass_sum = bodies[a].inv_mass + bodies[b].inv_mass;
@@ -431,7 +431,7 @@ fn resolve(bodies: &mut [Body], contact: &Contact) {
         + ra_cross_n * ra_cross_n * bodies[a].inv_inertia
         + rb_cross_n * rb_cross_n * bodies[b].inv_inertia;
 
-    let e = bodies[a].restitution.max(bodies[b].restitution);
+    let e = restitution;
     let j = -(1.0 + e) * contact_vel / denom;
 
     // Apply normal impulse
@@ -504,6 +504,7 @@ pub struct PhysicsWorld {
     /// Damping applied every frame: velocity *= (1 - linear_damping)
     linear_damping: f32,
     angular_damping: f32,
+    restitution: f32,
     dragged_body: Option<usize>,
 }
 
@@ -520,6 +521,7 @@ impl PhysicsWorld {
             color_idx: 0,
             linear_damping: 0.01,
             angular_damping: 0.02,
+            restitution: 0.6,
             dragged_body: None,
         };
 
@@ -579,6 +581,10 @@ impl PhysicsWorld {
 
     pub fn set_gravity(&mut self, g: f32) {
         self.gravity = g;
+    }
+
+    pub fn set_restitution(&mut self, r: f32) {
+        self.restitution = r.clamp(0.0, 1.0);
     }
 
     pub fn clear_dynamic(&mut self) {
@@ -702,9 +708,10 @@ impl PhysicsWorld {
 
         // --- Resolve ---
         // Multiple iterations for stability
+        let restitution = self.restitution;
         for _ in 0..6 {
             for contact in &contacts {
-                resolve(&mut self.bodies, contact);
+                resolve(&mut self.bodies, contact, restitution);
             }
         }
 
