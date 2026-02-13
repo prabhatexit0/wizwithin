@@ -190,8 +190,7 @@ function processEvents(memory: WebAssembly.Memory, eventsPtr: number, eventsByte
     const offset = i * eventSize;
     const kind = view.getUint8(offset);
     // bytes 1-3 are padding
-    const x = view.getFloat32(offset + 4, true); // little-endian
-    const y = view.getFloat32(offset + 8, true);
+    // bytes 4-7: x, bytes 8-11: y (unused here, used for positional audio if needed)
     const power = view.getFloat32(offset + 12, true);
 
     switch (kind) {
@@ -511,7 +510,7 @@ export default function BlastLab() {
   );
 
   const onPointerUp = useCallback(
-    (e: React.PointerEvent<HTMLCanvasElement>) => {
+    (_e: React.PointerEvent<HTMLCanvasElement>) => {
       if (aimStart.current && aimEnd.current) {
         const [sx, sy] = aimStart.current;
         const [ex, ey] = aimEnd.current;
