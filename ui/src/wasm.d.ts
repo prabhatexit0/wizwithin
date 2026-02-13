@@ -208,6 +208,9 @@ declare module "@blast_lab" {
     stats_peak_kinetic(): number;
     stats_peak_temp(): number;
     stats_pixels_destroyed(): number;
+    stats_total_energy(): number;
+    detonated_mask(): number;
+    particle_count(): number;
   }
 }
 
