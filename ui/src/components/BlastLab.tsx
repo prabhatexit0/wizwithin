@@ -14,6 +14,14 @@ const ENT_MISSILE = 3;
 const ENT_CLUSTER = 4;
 const ENT_DYNAMITE = 5;
 const ENT_NAPALM = 6;
+const ENT_NUKE = 7;
+const ENT_MIRV = 8;
+const ENT_BUNKER_BUSTER = 9;
+const ENT_FLASHBANG = 10;
+const ENT_SHRAPNEL = 11;
+const ENT_INCENDIARY = 12;
+const ENT_THERMOBARIC = 13;
+const ENT_LAUNCHER = 14;
 
 // Event kinds
 const EVT_EXPLOSION = 0;
@@ -30,13 +38,22 @@ const PREFAB_BUNKER = 3;
 const PREFAB_TOWER = 4;
 const PREFAB_BRIDGE = 5;
 const PREFAB_WALL = 6;
+const PREFAB_GROUND = 7;
+const PREFAB_VILLAGE = 8;
+const PREFAB_FORTRESS = 9;
 
 type ToolMode = "build" | "chaos";
 
-type BuildTool = "house" | "tree" | "pond" | "bunker" | "tower" | "bridge" | "wall";
-type ChaosTool = "grenade" | "molotov" | "missile" | "c4" | "cluster" | "dynamite" | "napalm";
+type BuildTool = "house" | "tree" | "pond" | "bunker" | "tower" | "bridge" | "wall" | "ground" | "village" | "fortress";
+type ChaosTool =
+  | "grenade" | "molotov" | "missile" | "c4" | "cluster" | "dynamite" | "napalm"
+  | "nuke" | "mirv" | "bunker_buster" | "flashbang" | "shrapnel" | "incendiary"
+  | "thermobaric" | "launcher";
 
 const BUILD_TOOLS: { id: BuildTool; label: string; prefab: number; color: string; desc: string }[] = [
+  { id: "ground", label: "Ground", prefab: PREFAB_GROUND, color: "#6b7280", desc: "Rolling terrain with grass, dirt, and bedrock" },
+  { id: "village", label: "Village", prefab: PREFAB_VILLAGE, color: "#92400e", desc: "Complete scene: houses, trees, and pond on terrain" },
+  { id: "fortress", label: "Fortress", prefab: PREFAB_FORTRESS, color: "#78716c", desc: "Complete scene: tower, walls, and bunker on terrain" },
   { id: "house", label: "House", prefab: PREFAB_HOUSE, color: "#8b5a2b", desc: "Wood walls, stone roof, glass windows" },
   { id: "tree", label: "Tree", prefab: PREFAB_TREE, color: "#4a9e3f", desc: "Wooden trunk with leafy canopy" },
   { id: "pond", label: "Pond", prefab: PREFAB_POND, color: "#3b82f6", desc: "Water pond with dirt rim" },
@@ -46,14 +63,36 @@ const BUILD_TOOLS: { id: BuildTool; label: string; prefab: number; color: string
   { id: "wall", label: "Wall", prefab: PREFAB_WALL, color: "#78716c", desc: "Stone fortification wall" },
 ];
 
-const CHAOS_TOOLS: { id: ChaosTool; label: string; kind: number; color: string; desc: string; throwable: boolean }[] = [
-  { id: "grenade", label: "Grenade", kind: ENT_GRENADE, color: "#4ade80", desc: "Arcs, bounces, 3s fuse", throwable: true },
-  { id: "molotov", label: "Molotov", kind: ENT_MOLOTOV, color: "#f97316", desc: "Arcs, shatters into fire", throwable: true },
-  { id: "cluster", label: "Cluster", kind: ENT_CLUSTER, color: "#06b6d4", desc: "Splits into 8 explosions", throwable: true },
-  { id: "napalm", label: "Napalm", kind: ENT_NAPALM, color: "#f59e0b", desc: "Massive fire on impact", throwable: true },
-  { id: "missile", label: "Missile", kind: ENT_MISSILE, color: "#fbbf24", desc: "Fires from screen edge", throwable: false },
-  { id: "dynamite", label: "Dynamite", kind: ENT_DYNAMITE, color: "#dc2626", desc: "Place, auto-detonates 1.5s", throwable: false },
-  { id: "c4", label: "C4", kind: ENT_C4, color: "#ef4444", desc: "Place, then detonate all", throwable: false },
+interface ChaosToolDef {
+  id: ChaosTool;
+  label: string;
+  kind: number;
+  color: string;
+  desc: string;
+  throwable: boolean;
+  category: "throwable" | "placed" | "strike" | "launcher";
+}
+
+const CHAOS_TOOLS: ChaosToolDef[] = [
+  // Throwables — drag to aim
+  { id: "grenade", label: "Grenade", kind: ENT_GRENADE, color: "#4ade80", desc: "Bounces, 3s fuse", throwable: true, category: "throwable" },
+  { id: "molotov", label: "Molotov", kind: ENT_MOLOTOV, color: "#f97316", desc: "Shatters into fire on impact", throwable: true, category: "throwable" },
+  { id: "cluster", label: "Cluster", kind: ENT_CLUSTER, color: "#06b6d4", desc: "Splits into 8 explosions", throwable: true, category: "throwable" },
+  { id: "napalm", label: "Napalm", kind: ENT_NAPALM, color: "#f59e0b", desc: "Massive fire zone on impact", throwable: true, category: "throwable" },
+  { id: "flashbang", label: "Flash", kind: ENT_FLASHBANG, color: "#e5e7eb", desc: "Huge white shockwave, little damage", throwable: true, category: "throwable" },
+  { id: "shrapnel", label: "Shrapnel", kind: ENT_SHRAPNEL, color: "#b91c1c", desc: "40 random penetrating rays", throwable: true, category: "throwable" },
+  { id: "mirv", label: "MIRV", kind: ENT_MIRV, color: "#14b8a6", desc: "Splits into 5 grenades", throwable: true, category: "throwable" },
+  { id: "nuke", label: "Nuke", kind: ENT_NUKE, color: "#fef08a", desc: "Enormous blast + fire ring", throwable: true, category: "throwable" },
+  { id: "thermobaric", label: "Thermo", kind: ENT_THERMOBARIC, color: "#dc2626", desc: "Massive blast + pressure wave + fire", throwable: true, category: "throwable" },
+  // Placed — click to drop
+  { id: "dynamite", label: "Dynamite", kind: ENT_DYNAMITE, color: "#ef4444", desc: "Place, auto-detonates 1.5s", throwable: false, category: "placed" },
+  { id: "c4", label: "C4", kind: ENT_C4, color: "#f87171", desc: "Place, then detonate all", throwable: false, category: "placed" },
+  { id: "incendiary", label: "Incendy", kind: ENT_INCENDIARY, color: "#fb923c", desc: "Place, 3s fuse, fire blanket", throwable: false, category: "placed" },
+  // Strikes — click target
+  { id: "missile", label: "Missile", kind: ENT_MISSILE, color: "#fbbf24", desc: "Fires from launchers or screen edge", throwable: false, category: "strike" },
+  { id: "bunker_buster", label: "Buster", kind: ENT_BUNKER_BUSTER, color: "#9ca3af", desc: "Drops from sky, penetrates terrain", throwable: false, category: "strike" },
+  // Launcher
+  { id: "launcher", label: "Launcher", kind: ENT_LAUNCHER, color: "#22c55e", desc: "Place launchers, then use Missile to fire from them", throwable: false, category: "launcher" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -73,7 +112,6 @@ function playExplosion(power: number) {
   const now = ctx.currentTime;
   const vol = Math.min(1, power / 150) * 0.4;
 
-  // Low square wave pitching down — 8-bit boom
   const osc = ctx.createOscillator();
   osc.type = "square";
   osc.frequency.setValueAtTime(90, now);
@@ -85,7 +123,6 @@ function playExplosion(power: number) {
   osc.start(now);
   osc.stop(now + 0.6);
 
-  // Noise burst
   const nLen = Math.floor(ctx.sampleRate * 0.15);
   const nBuf = ctx.createBuffer(1, nLen, ctx.sampleRate);
   const nd = nBuf.getChannelData(0);
@@ -125,7 +162,6 @@ function playFireIgnited() {
   const ctx = getAudioCtx();
   const now = ctx.currentTime;
 
-  // Noise hiss
   const nLen = Math.floor(ctx.sampleRate * 0.5);
   const nBuf = ctx.createBuffer(1, nLen, ctx.sampleRate);
   const nd = nBuf.getChannelData(0);
@@ -147,7 +183,6 @@ function playMissileLaunch() {
   const ctx = getAudioCtx();
   const now = ctx.currentTime;
 
-  // Rising triangle wave — "pew"
   const osc = ctx.createOscillator();
   osc.type = "triangle";
   osc.frequency.setValueAtTime(200, now);
@@ -197,14 +232,12 @@ function processEvents(memory: WebAssembly.Memory, eventsPtr: number, eventsByte
   if (eventsByteLen === 0) return;
 
   const view = new DataView(memory.buffer, eventsPtr, eventsByteLen);
-  const eventSize = 16; // 16 bytes per event (see Rust repr(C))
+  const eventSize = 16;
   const count = eventsByteLen / eventSize;
 
   for (let i = 0; i < count; i++) {
     const offset = i * eventSize;
     const kind = view.getUint8(offset);
-    // bytes 1-3 are padding
-    // bytes 4-7: x, bytes 8-11: y (unused here, used for positional audio if needed)
     const power = view.getFloat32(offset + 12, true);
 
     switch (kind) {
@@ -237,10 +270,11 @@ export default function BlastLab() {
   const [errorMsg, setErrorMsg] = useState("");
 
   const [mode, setMode] = useState<ToolMode>("build");
-  const [buildTool, setBuildTool] = useState<BuildTool>("house");
+  const [buildTool, setBuildTool] = useState<BuildTool>("village");
   const [chaosTool, setChaosTool] = useState<ChaosTool>("grenade");
   const [entityCount, setEntityCount] = useState(0);
   const [hasC4, setHasC4] = useState(false);
+  const [hasLaunchers, setHasLaunchers] = useState(false);
 
   // Drag-to-aim state
   const [aiming, setAiming] = useState(false);
@@ -300,7 +334,6 @@ export default function BlastLab() {
           if (evtByteLen > 0) {
             processEvents(wasmMemory, evtPtr, evtByteLen);
 
-            // Check for explosions to trigger shake/flash
             const view = new DataView(wasmMemory.buffer, evtPtr, evtByteLen);
             for (let i = 0; i < evtByteLen / 16; i++) {
               const kind = view.getUint8(i * 16);
@@ -321,7 +354,7 @@ export default function BlastLab() {
           const imageData = new ImageData(pixels, SIM_W, SIM_H);
           ctx.putImageData(imageData, 0, 0);
 
-          // Draw trajectory line (on top of sim render)
+          // Draw trajectory line
           if (aimStart.current && aimEnd.current) {
             const [sx, sy] = aimStart.current;
             const [ex, ey] = aimEnd.current;
@@ -335,12 +368,11 @@ export default function BlastLab() {
             ctx.beginPath();
             ctx.moveTo(sx, sy);
 
-            // Simulate trajectory dots
             let px = sx, py = sy;
             let vx = dx * throwPower, vy = dy * throwPower;
             for (let step = 0; step < 40; step++) {
               vx *= 0.99;
-              vy += 0.18; // gravity
+              vy += 0.18;
               px += vx;
               py += vy;
               if (px < 0 || px >= SIM_W || py < 0 || py >= SIM_H) break;
@@ -374,13 +406,15 @@ export default function BlastLab() {
           frameCount++;
           if (frameCount % 8 === 0) {
             setEntityCount(sim.entity_count());
-            // Check for C4 presence
             const data = sim.get_entity_data();
             let c4Found = false;
+            let launcherFound = false;
             for (let i = 0; i < data.length; i += 6) {
-              if (data[i] === ENT_C4) { c4Found = true; break; }
+              if (data[i] === ENT_C4) c4Found = true;
+              if (data[i] === ENT_LAUNCHER) launcherFound = true;
             }
             setHasC4(c4Found);
+            setHasLaunchers(launcherFound);
           }
 
           rafId = requestAnimationFrame(frame);
@@ -450,7 +484,6 @@ export default function BlastLab() {
       if (!tool) return;
 
       if (tool.throwable) {
-        // Drag-to-aim: velocity = (start - end) * power
         const throwPower = 0.08;
         const vx = (startX - endX) * throwPower;
         const vy = (startY - endY) * throwPower;
@@ -468,35 +501,49 @@ export default function BlastLab() {
       const tool = CHAOS_TOOLS.find((t) => t.id === chaosToolRef.current);
       if (!tool) return;
 
-      if (tool.id === "c4" || tool.id === "dynamite") {
+      if (tool.category === "placed" || tool.category === "launcher") {
         // Place at click point
         sim.spawn_entity(tool.kind, pt[0], pt[1], 0, 0);
         playPlaceSound();
       } else if (tool.id === "missile") {
-        // Fire missile from the farthest screen edge toward click point
-        const distTop = pt[1];
-        const distBot = SIM_H - pt[1];
-        const distLeft = pt[0];
-        const distRight = SIM_W - pt[0];
-        const maxDist = Math.max(distTop, distBot, distLeft, distRight);
-
-        let ox: number, oy: number;
-        if (maxDist === distBot) {
-          ox = SIM_W / 2; oy = SIM_H + 5;
-        } else if (maxDist === distTop) {
-          ox = SIM_W / 2; oy = -5;
-        } else if (maxDist === distLeft) {
-          ox = -5; oy = SIM_H / 2;
-        } else {
-          ox = SIM_W + 5; oy = SIM_H / 2;
+        // If launchers exist, fire from launchers toward target
+        const data = sim.get_entity_data();
+        let hasLauncher = false;
+        for (let i = 0; i < data.length; i += 6) {
+          if (data[i] === ENT_LAUNCHER) { hasLauncher = true; break; }
         }
 
-        const dx = pt[0] - ox;
-        const dy = pt[1] - oy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 1) return;
-        const speed = 4;
-        sim.spawn_entity(ENT_MISSILE, ox, oy, (dx / dist) * speed, (dy / dist) * speed);
+        if (hasLauncher) {
+          sim.fire_launchers(pt[0], pt[1]);
+        } else {
+          // Fallback: fire from farthest screen edge
+          const distTop = pt[1];
+          const distBot = SIM_H - pt[1];
+          const distLeft = pt[0];
+          const distRight = SIM_W - pt[0];
+          const maxDist = Math.max(distTop, distBot, distLeft, distRight);
+
+          let ox: number, oy: number;
+          if (maxDist === distBot) {
+            ox = SIM_W / 2; oy = SIM_H + 5;
+          } else if (maxDist === distTop) {
+            ox = SIM_W / 2; oy = -5;
+          } else if (maxDist === distLeft) {
+            ox = -5; oy = SIM_H / 2;
+          } else {
+            ox = SIM_W + 5; oy = SIM_H / 2;
+          }
+
+          const dx = pt[0] - ox;
+          const dy = pt[1] - oy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 1) return;
+          const speed = 4;
+          sim.spawn_entity(ENT_MISSILE, ox, oy, (dx / dist) * speed, (dy / dist) * speed);
+        }
+      } else if (tool.id === "bunker_buster") {
+        // Drop from directly above the click point
+        sim.spawn_entity(ENT_BUNKER_BUSTER, pt[0], -10, 0, 3.0);
       }
     },
     [toSim],
@@ -517,7 +564,6 @@ export default function BlastLab() {
       } else {
         const tool = CHAOS_TOOLS.find((t) => t.id === chaosToolRef.current);
         if (tool?.throwable) {
-          // Start aiming
           setAiming(true);
           aimStart.current = pt;
           aimEnd.current = pt;
@@ -563,9 +609,11 @@ export default function BlastLab() {
   // Actions
   // -------------------------------------------------------------------------
   const handleDetonateC4 = useCallback(() => {
-    const sim = simRef.current;
-    if (!sim) return;
-    sim.detonate_c4();
+    simRef.current?.detonate_c4();
+  }, []);
+
+  const handleClearLaunchers = useCallback(() => {
+    simRef.current?.clear_launchers();
   }, []);
 
   const handleReset = useCallback(() => {
@@ -574,10 +622,36 @@ export default function BlastLab() {
     sim.clear();
     setEntityCount(0);
     setHasC4(false);
+    setHasLaunchers(false);
     shakeRef.current = 0;
     flashRef.current = 0;
     if (canvasRef.current) canvasRef.current.style.transform = "";
   }, []);
+
+  // -------------------------------------------------------------------------
+  // Hint text
+  // -------------------------------------------------------------------------
+  const getHint = (): string => {
+    if (mode === "build") {
+      const bt = BUILD_TOOLS.find(t => t.id === buildTool);
+      if (bt?.id === "village" || bt?.id === "fortress") return `Tap to generate ${bt.label} scene`;
+      if (bt?.id === "ground") return "Tap to generate terrain";
+      return "Tap to stamp prefab";
+    }
+    const ct = CHAOS_TOOLS.find(t => t.id === chaosTool);
+    if (!ct) return "";
+    switch (ct.category) {
+      case "throwable": return "Drag to aim, release to throw";
+      case "placed":
+        if (ct.id === "c4") return "Tap to place C4, then Detonate";
+        if (ct.id === "incendiary") return "Tap to place — 3s fuse, fire blanket";
+        return "Tap to place — auto-detonates";
+      case "strike":
+        if (ct.id === "missile") return hasLaunchers ? "Tap target — missiles fire from launchers" : "Tap target — fires from screen edge (place Launchers first!)";
+        return "Tap target — drops from sky, penetrates terrain";
+      case "launcher": return "Tap to place launcher, then use Missile to fire";
+    }
+  };
 
   // -------------------------------------------------------------------------
   // Render
@@ -613,44 +687,41 @@ export default function BlastLab() {
                 Chaos
               </button>
             </div>
+          </div>
 
-            {/* Build tools */}
-            {mode === "build" && (
-              <div className="flex rounded-lg overflow-hidden border border-zinc-700">
-                {BUILD_TOOLS.map((tool) => (
-                  <button
-                    key={tool.id}
-                    onClick={() => setBuildTool(tool.id)}
-                    title={tool.desc}
-                    className={`px-3 py-1.5 text-sm transition-colors cursor-pointer ${
-                      buildTool === tool.id ? "text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                    }`}
-                    style={buildTool === tool.id ? { backgroundColor: tool.color } : undefined}
-                  >
-                    {tool.label}
-                  </button>
-                ))}
-              </div>
-            )}
+          {/* Tool buttons */}
+          <div className="flex flex-wrap justify-center gap-1 max-w-[960px]">
+            {mode === "build" && BUILD_TOOLS.map((tool) => (
+              <button
+                key={tool.id}
+                onClick={() => setBuildTool(tool.id)}
+                title={tool.desc}
+                className={`px-2.5 py-1 text-xs rounded transition-colors cursor-pointer border ${
+                  buildTool === tool.id
+                    ? "text-white border-white/30"
+                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 border-zinc-700"
+                }`}
+                style={buildTool === tool.id ? { backgroundColor: tool.color } : undefined}
+              >
+                {tool.label}
+              </button>
+            ))}
 
-            {/* Chaos tools */}
-            {mode === "chaos" && (
-              <div className="flex rounded-lg overflow-hidden border border-zinc-700">
-                {CHAOS_TOOLS.map((tool) => (
-                  <button
-                    key={tool.id}
-                    onClick={() => setChaosTool(tool.id)}
-                    title={tool.desc}
-                    className={`px-3 py-1.5 text-sm transition-colors cursor-pointer ${
-                      chaosTool === tool.id ? "text-white" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
-                    }`}
-                    style={chaosTool === tool.id ? { backgroundColor: tool.color } : undefined}
-                  >
-                    {tool.label}
-                  </button>
-                ))}
-              </div>
-            )}
+            {mode === "chaos" && CHAOS_TOOLS.map((tool) => (
+              <button
+                key={tool.id}
+                onClick={() => setChaosTool(tool.id)}
+                title={tool.desc}
+                className={`px-2.5 py-1 text-xs rounded transition-colors cursor-pointer border ${
+                  chaosTool === tool.id
+                    ? "text-white border-white/30"
+                    : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 border-zinc-700"
+                }`}
+                style={chaosTool === tool.id ? { backgroundColor: tool.color } : undefined}
+              >
+                {tool.label}
+              </button>
+            ))}
           </div>
 
           {/* Actions row */}
@@ -661,6 +732,14 @@ export default function BlastLab() {
                 className="px-4 py-1.5 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-500 text-white border border-red-500 transition-colors cursor-pointer animate-pulse"
               >
                 Detonate C4
+              </button>
+            )}
+            {hasLaunchers && (
+              <button
+                onClick={handleClearLaunchers}
+                className="px-3 py-1.5 rounded-lg text-sm bg-zinc-800 text-emerald-400 hover:bg-zinc-700 border border-emerald-700 transition-colors cursor-pointer"
+              >
+                Clear Launchers
               </button>
             )}
             <button
@@ -703,16 +782,7 @@ export default function BlastLab() {
 
       {status === "running" && (
         <p className="text-zinc-500 text-xs text-center px-2">
-          {mode === "build"
-            ? "Tap to stamp prefab"
-            : chaosTool === "c4"
-              ? "Tap to place C4, then Detonate"
-              : chaosTool === "dynamite"
-                ? "Tap to place — auto-detonates in 1.5s"
-                : chaosTool === "missile"
-                  ? "Tap to fire missile from screen edge"
-                  : "Drag to aim, release to throw"
-          }
+          {getHint()}
         </p>
       )}
     </div>

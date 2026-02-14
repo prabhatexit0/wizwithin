@@ -9,8 +9,8 @@ const W: usize = 640;
 const H: usize = 400;
 const N: usize = W * H;
 const GRAVITY: f32 = 0.18;
-const MAX_PARTICLES: usize = 3000;
-const MAX_ENTITIES: usize = 128;
+const MAX_PARTICLES: usize = 5000;
+const MAX_ENTITIES: usize = 256;
 const NUM_RAYS: usize = 360;
 const RAY_STEP: f32 = 0.8;
 
@@ -35,6 +35,14 @@ const ENT_MISSILE: u8 = 3;
 const ENT_CLUSTER: u8 = 4;
 const ENT_DYNAMITE: u8 = 5;
 const ENT_NAPALM: u8 = 6;
+const ENT_NUKE: u8 = 7;
+const ENT_MIRV: u8 = 8;
+const ENT_BUNKER_BUSTER: u8 = 9;
+const ENT_FLASHBANG: u8 = 10;
+const ENT_SHRAPNEL: u8 = 11;
+const ENT_INCENDIARY: u8 = 12;
+const ENT_THERMOBARIC: u8 = 13;
+const ENT_LAUNCHER: u8 = 14;
 
 // Event kinds (must match JS)
 const EVT_EXPLOSION: u8 = 0;
@@ -51,6 +59,9 @@ const PREFAB_BUNKER: u8 = 3;
 const PREFAB_TOWER: u8 = 4;
 const PREFAB_BRIDGE: u8 = 5;
 const PREFAB_WALL: u8 = 6;
+const PREFAB_GROUND: u8 = 7;
+const PREFAB_VILLAGE: u8 = 8;
+const PREFAB_FORTRESS: u8 = 9;
 
 // Particle kinds
 const PK_SPARK: u8 = 0;
@@ -152,12 +163,20 @@ impl Entity {
     fn new(kind: u8, x: f32, y: f32, vx: f32, vy: f32) -> Self {
         let fuse = match kind {
             ENT_GRENADE => 3.0,
-            ENT_MOLOTOV => 99.0,  // detonates on impact
-            ENT_C4 => 999.0,      // manual detonation
-            ENT_MISSILE => 99.0,  // detonates on impact
-            ENT_CLUSTER => 2.0,   // shorter fuse, splits into mini-explosions
-            ENT_DYNAMITE => 1.5,  // auto-detonates, very powerful
-            ENT_NAPALM => 99.0,   // detonates on impact
+            ENT_MOLOTOV => 99.0,   // impact
+            ENT_C4 => 999.0,       // manual
+            ENT_MISSILE => 99.0,   // impact
+            ENT_CLUSTER => 2.0,
+            ENT_DYNAMITE => 1.5,
+            ENT_NAPALM => 99.0,    // impact
+            ENT_NUKE => 4.0,
+            ENT_MIRV => 2.5,
+            ENT_BUNKER_BUSTER => 99.0, // penetration-based, not fuse
+            ENT_FLASHBANG => 1.5,
+            ENT_SHRAPNEL => 1.5,
+            ENT_INCENDIARY => 3.0,
+            ENT_THERMOBARIC => 3.0,
+            ENT_LAUNCHER => 999.0, // permanent
             _ => 1.0,
         };
         Entity { kind, alive: true, x, y, vx, vy, fuse, bounce_count: 0 }
@@ -300,6 +319,9 @@ impl World {
             PREFAB_TOWER => self.stamp_tower(cx, cy),
             PREFAB_BRIDGE => self.stamp_bridge(cx, cy),
             PREFAB_WALL => self.stamp_wall(cx, cy),
+            PREFAB_GROUND => self.stamp_ground(cx, cy),
+            PREFAB_VILLAGE => self.stamp_village(cx, cy),
+            PREFAB_FORTRESS => self.stamp_fortress(cx, cy),
             _ => {}
         }
     }
@@ -330,6 +352,32 @@ impl World {
         for e in &mut self.entities {
             if e.kind == ENT_C4 { e.alive = false; }
         }
+    }
+
+    // Fire all launchers toward a target
+    pub fn fire_launchers(&mut self, target_x: f32, target_y: f32) {
+        let launchers: Vec<(f32, f32)> = self.entities.iter()
+            .filter(|e| e.alive && e.kind == ENT_LAUNCHER)
+            .map(|e| (e.x, e.y))
+            .collect();
+
+        for (lx, ly) in launchers {
+            let dx = target_x - lx;
+            let dy = target_y - ly;
+            let dist = (dx * dx + dy * dy).sqrt();
+            if dist < 1.0 { continue; }
+            let speed = 4.0;
+            self.spawn_entity(ENT_MISSILE, lx, ly - 5.0,
+                (dx / dist) * speed, (dy / dist) * speed);
+        }
+    }
+
+    // Remove all launchers
+    pub fn clear_launchers(&mut self) {
+        for e in &mut self.entities {
+            if e.kind == ENT_LAUNCHER { e.alive = false; }
+        }
+        self.entities.retain(|e| e.alive);
     }
 
     // -- Simulation tick --------------------------------------------------
@@ -638,6 +686,48 @@ impl World {
         }
     }
 
+    fn stamp_ground(&mut self, _cx: i32, ground_y: i32) {
+        let mut rng = rand::rng();
+        for x in 0..W as i32 {
+            let undulation = ((x as f32 * 0.015).sin() * 10.0
+                + (x as f32 * 0.04).sin() * 5.0
+                + (x as f32 * 0.1).sin() * 2.0) as i32;
+            let surface_y = ground_y + undulation;
+
+            // Grass layer
+            self.set_cell(x, surface_y, LEAF, rng.random_range(0u8..40));
+            if rng.random::<f32>() < 0.7 {
+                self.set_cell(x, surface_y - 1, LEAF, rng.random_range(0u8..40));
+            }
+            // Dirt layer
+            for y in (surface_y + 1)..(surface_y + 25).min(H as i32) {
+                self.set_cell(x, y, DIRT, rng.random_range(0u8..40));
+            }
+            // Stone bedrock
+            for y in (surface_y + 25)..(H as i32) {
+                self.set_cell(x, y, STONE, rng.random_range(0u8..40));
+            }
+        }
+    }
+
+    fn stamp_village(&mut self, _cx: i32, _cy: i32) {
+        self.stamp_ground(0, 330);
+        self.stamp_house(130, 328);
+        self.stamp_house(450, 328);
+        self.stamp_tree(50, 328);
+        self.stamp_tree(280, 328);
+        self.stamp_tree(560, 328);
+        self.stamp_pond(350, 348);
+    }
+
+    fn stamp_fortress(&mut self, _cx: i32, _cy: i32) {
+        self.stamp_ground(0, 330);
+        self.stamp_tower(320, 328);
+        self.stamp_wall(170, 328);
+        self.stamp_wall(470, 328);
+        self.stamp_bunker(320, 350);
+    }
+
     fn set_cell(&mut self, x: i32, y: i32, mat: u8, noise: u8) {
         if !Self::in_bounds(x, y) { return; }
         let idx = Self::idx(x as usize, y as usize);
@@ -661,6 +751,7 @@ impl World {
         let mut deferred_molotov: Vec<(f32, f32)> = Vec::new();
         let mut deferred_napalm: Vec<(f32, f32)> = Vec::new();
         let mut deferred_cluster: Vec<(f32, f32)> = Vec::new();
+        let mut deferred_special: Vec<(u8, f32, f32)> = Vec::new(); // (kind, x, y)
         let mut deferred_events: Vec<Event> = Vec::new();
 
         for i in 0..self.entities.len() {
@@ -668,18 +759,15 @@ impl World {
 
             let e = &mut self.entities[i];
 
-            // Apply gravity (except missile which has thrust)
+            // ---- Gravity / movement physics ----
             match e.kind {
                 ENT_MISSILE => {
                     let speed = (e.vx * e.vx + e.vy * e.vy).sqrt();
                     if speed > 0.1 {
-                        let thrust = 0.35;
-                        e.vx += (e.vx / speed) * thrust;
-                        e.vy += (e.vy / speed) * thrust;
+                        e.vx += (e.vx / speed) * 0.35;
+                        e.vy += (e.vy / speed) * 0.35;
                     }
                     e.vy += GRAVITY * 0.15;
-
-                    // Spawn trail particles
                     if self.particles.len() < MAX_PARTICLES {
                         self.particles.push(Particle {
                             x: e.x, y: e.y,
@@ -691,7 +779,20 @@ impl World {
                         });
                     }
                 }
-                ENT_C4 | ENT_DYNAMITE => {
+                ENT_BUNKER_BUSTER => {
+                    e.vy += GRAVITY * 1.5; // heavy
+                    if self.particles.len() < MAX_PARTICLES && rng.random::<f32>() < 0.5 {
+                        self.particles.push(Particle {
+                            x: e.x, y: e.y,
+                            vx: rng.random_range(-0.3f32..0.3),
+                            vy: rng.random_range(-1.0f32..0.0),
+                            life: 1.0, decay: rng.random_range(0.03..0.06),
+                            kind: PK_SMOKE,
+                            r: 120, g: 115, b: 110,
+                        });
+                    }
+                }
+                ENT_C4 | ENT_DYNAMITE | ENT_INCENDIARY | ENT_LAUNCHER => {
                     let below_x = e.x.round() as i32;
                     let below_y = (e.y + 1.0).round() as i32;
                     if !Self::check_solid(&self.grid, below_x, below_y) {
@@ -703,7 +804,6 @@ impl World {
                     }
                 }
                 _ => {
-                    // Grenade, molotov, cluster, napalm: standard arc
                     e.vy += GRAVITY;
                 }
             }
@@ -716,16 +816,19 @@ impl World {
             let gx = new_x.round() as i32;
             let gy = new_y.round() as i32;
 
-            let hit_terrain = if (e.kind == ENT_C4 || e.kind == ENT_DYNAMITE) && e.vx.abs() < 0.01 && e.vy.abs() < 0.01 {
+            let is_grounded = matches!(e.kind, ENT_C4 | ENT_DYNAMITE | ENT_INCENDIARY | ENT_LAUNCHER);
+            let hit_terrain = if is_grounded && e.vx.abs() < 0.01 && e.vy.abs() < 0.01 {
                 false
             } else {
                 Self::check_solid(&self.grid, gx, gy)
             };
 
+            // ---- Collision handling ----
             if hit_terrain {
                 match e.kind {
-                    ENT_GRENADE | ENT_CLUSTER => {
-                        // Bounce on impact
+                    // Bounceable throwables
+                    ENT_GRENADE | ENT_CLUSTER | ENT_NUKE | ENT_MIRV
+                    | ENT_FLASHBANG | ENT_SHRAPNEL | ENT_THERMOBARIC => {
                         let speed = (e.vx * e.vx + e.vy * e.vy).sqrt();
                         if speed > 1.5 && e.bounce_count < 5 {
                             let ox = e.x.round() as i32;
@@ -754,96 +857,110 @@ impl World {
                         deferred_explosions.push((e.x, e.y, 120.0, 1.0));
                         e.alive = false;
                     }
-                    ENT_C4 | ENT_DYNAMITE => {
+                    ENT_BUNKER_BUSTER => {
+                        // Penetrate terrain: destroy cell, keep moving
+                        if Self::in_bounds(gx, gy) {
+                            let idx = Self::idx(gx as usize, gy as usize);
+                            self.grid[idx] = Cell::empty();
+                        }
+                        e.x = new_x;
+                        e.y = new_y;
+                        e.bounce_count += 1;
+                        if e.bounce_count >= 40 {
+                            deferred_explosions.push((e.x, e.y, 150.0, 1.3));
+                            e.alive = false;
+                        }
+                    }
+                    _ => {
+                        // Grounded types
                         e.vx = 0.0;
                         e.vy = 0.0;
                     }
-                    _ => {}
                 }
-            } else {
+            } else if e.kind != ENT_BUNKER_BUSTER || e.bounce_count == 0 {
                 e.x = new_x;
                 e.y = new_y;
+            } else {
+                // Bunker buster emerged from terrain → explode
+                e.x = new_x;
+                e.y = new_y;
+                if e.bounce_count > 5 {
+                    deferred_explosions.push((e.x, e.y, 150.0, 1.3));
+                    e.alive = false;
+                }
             }
 
+            // ---- Out of bounds ----
             if e.x < -20.0 || e.x > (W as f32 + 20.0) || e.y > (H as f32 + 20.0) || e.y < -100.0 {
                 e.alive = false;
                 continue;
             }
 
-            // Fuse countdowns
+            // ---- Fuse countdowns ----
             if e.alive {
-                match e.kind {
-                    ENT_GRENADE => {
-                        e.fuse -= dt;
-                        let prev = e.fuse + dt;
-                        let tick_interval = 0.4;
-                        if (prev / tick_interval).floor() > (e.fuse / tick_interval).floor() && e.fuse > 0.0 {
-                            deferred_events.push(Event::new(EVT_FUSE_TICK, e.x, e.y, e.fuse));
-                        }
-                        if e.fuse <= 0.0 {
-                            deferred_explosions.push((e.x, e.y, 100.0, 0.9));
-                            e.alive = false;
-                        }
+                let tick_interval = match e.kind {
+                    ENT_GRENADE => 0.4,
+                    ENT_CLUSTER => 0.3,
+                    ENT_DYNAMITE => 0.25,
+                    ENT_NUKE => 0.5,
+                    ENT_MIRV => 0.4,
+                    ENT_FLASHBANG => 0.3,
+                    ENT_SHRAPNEL => 0.3,
+                    ENT_INCENDIARY => 0.5,
+                    ENT_THERMOBARIC => 0.4,
+                    _ => 0.0, // no fuse
+                };
+
+                if tick_interval > 0.0 {
+                    e.fuse -= dt;
+                    let prev = e.fuse + dt;
+                    if (prev / tick_interval).floor() > (e.fuse / tick_interval).floor() && e.fuse > 0.0 {
+                        deferred_events.push(Event::new(EVT_FUSE_TICK, e.x, e.y, e.fuse));
                     }
-                    ENT_CLUSTER => {
-                        e.fuse -= dt;
-                        let prev = e.fuse + dt;
-                        let tick_interval = 0.3;
-                        if (prev / tick_interval).floor() > (e.fuse / tick_interval).floor() && e.fuse > 0.0 {
-                            deferred_events.push(Event::new(EVT_FUSE_TICK, e.x, e.y, e.fuse));
+                    if e.fuse <= 0.0 {
+                        match e.kind {
+                            ENT_GRENADE => deferred_explosions.push((e.x, e.y, 100.0, 0.9)),
+                            ENT_CLUSTER => deferred_cluster.push((e.x, e.y)),
+                            ENT_DYNAMITE => deferred_explosions.push((e.x, e.y, 200.0, 1.5)),
+                            _ => deferred_special.push((e.kind, e.x, e.y)),
                         }
-                        if e.fuse <= 0.0 {
-                            deferred_cluster.push((e.x, e.y));
-                            e.alive = false;
-                        }
+                        e.alive = false;
                     }
-                    ENT_DYNAMITE => {
-                        e.fuse -= dt;
-                        let prev = e.fuse + dt;
-                        let tick_interval = 0.25;
-                        if (prev / tick_interval).floor() > (e.fuse / tick_interval).floor() && e.fuse > 0.0 {
-                            deferred_events.push(Event::new(EVT_FUSE_TICK, e.x, e.y, e.fuse));
-                        }
-                        if e.fuse <= 0.0 {
-                            deferred_explosions.push((e.x, e.y, 200.0, 1.5));
-                            e.alive = false;
-                        }
-                    }
-                    _ => {}
                 }
             }
         }
 
-        // Apply deferred events
+        // ---- Process deferred ----
         self.events.extend(deferred_events);
 
-        // Process deferred explosions
         for (x, y, radius, power) in deferred_explosions {
             self.explode(x, y, radius, power);
         }
-
-        // Process deferred molotov shatters
         for (x, y) in deferred_molotov {
             self.shatter_molotov(x, y);
         }
-
-        // Process deferred napalm strikes
         for (x, y) in deferred_napalm {
             self.shatter_napalm(x, y);
         }
-
-        // Process deferred cluster detonations — ring of mini-explosions
         for (cx, cy) in deferred_cluster {
-            for i in 0..8u32 {
-                let angle = (i as f32) * std::f32::consts::TAU / 8.0;
+            for j in 0..8u32 {
+                let angle = (j as f32) * std::f32::consts::TAU / 8.0;
                 let r = 25.0;
-                let ex = cx + angle.cos() * r;
-                let ey = cy + angle.sin() * r;
-                self.explode(ex, ey, 50.0, 0.7);
+                self.explode(cx + angle.cos() * r, cy + angle.sin() * r, 50.0, 0.7);
+            }
+        }
+        for (kind, x, y) in deferred_special {
+            match kind {
+                ENT_NUKE => self.detonate_nuke(x, y),
+                ENT_MIRV => self.split_mirv(x, y),
+                ENT_FLASHBANG => self.detonate_flashbang(x, y),
+                ENT_SHRAPNEL => self.detonate_shrapnel(x, y),
+                ENT_INCENDIARY => self.detonate_incendiary(x, y),
+                ENT_THERMOBARIC => self.detonate_thermobaric(x, y),
+                _ => {}
             }
         }
 
-        // Cleanup dead entities
         self.entities.retain(|e| e.alive);
     }
 
@@ -1042,6 +1159,311 @@ impl World {
 
         // Small explosion to clear terrain at center
         self.explode(cx, cy, 40.0, 0.5);
+    }
+
+    // =====================================================================
+    // Nuke — enormous explosion + fire ring + white flash
+    // =====================================================================
+
+    fn detonate_nuke(&mut self, cx: f32, cy: f32) {
+        let mut rng = rand::rng();
+
+        // Massive explosion
+        self.explode(cx, cy, 350.0, 2.5);
+
+        // Fire ring at ~80px radius
+        for _ in 0..500 {
+            let angle = rng.random_range(0.0f32..std::f32::consts::TAU);
+            let dist = rng.random_range(40.0f32..80.0);
+            let fx = cx as i32 + (angle.cos() * dist) as i32;
+            let fy = cy as i32 + (angle.sin() * dist) as i32;
+            if !Self::in_bounds(fx, fy) { continue; }
+            let idx = Self::idx(fx as usize, fy as usize);
+            self.grid[idx] = Cell {
+                mat: FIRE,
+                noise: rng.random_range(0u8..40),
+                heat: 1.0,
+                fire_ttl: rng.random_range(100..250),
+            };
+        }
+
+        // White flash shockwave
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 10.0, max_radius: 400.0,
+            speed: 8.0, life: 1.0,
+            r: 255, g: 255, b: 255,
+        });
+
+        // Second orange shockwave
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 5.0, max_radius: 300.0,
+            speed: 5.0, life: 1.0,
+            r: 255, g: 180, b: 50,
+        });
+
+        // Debris cloud
+        for _ in 0..80 {
+            if self.particles.len() >= MAX_PARTICLES { break; }
+            let angle = rng.random_range(0.0f32..std::f32::consts::TAU);
+            let speed = rng.random_range(2.0f32..8.0);
+            self.particles.push(Particle {
+                x: cx, y: cy,
+                vx: angle.cos() * speed,
+                vy: angle.sin() * speed - 2.0,
+                life: 1.0, decay: rng.random_range(0.005..0.015),
+                kind: PK_SMOKE,
+                r: 120, g: 110, b: 100,
+            });
+        }
+    }
+
+    // =====================================================================
+    // MIRV — splits into 5 short-fuse grenades
+    // =====================================================================
+
+    fn split_mirv(&mut self, cx: f32, cy: f32) {
+        let mut rng = rand::rng();
+
+        // Small pop
+        self.explode(cx, cy, 30.0, 0.3);
+
+        // Spawn 5 grenade submunitions
+        for j in 0..5u32 {
+            let angle = (j as f32) * std::f32::consts::TAU / 5.0
+                + rng.random_range(-0.3f32..0.3);
+            let speed = rng.random_range(2.5f32..4.0);
+            let vx = angle.cos() * speed;
+            let vy = angle.sin() * speed - 1.5; // bias upward
+            if self.entities.len() < MAX_ENTITIES {
+                let mut sub = Entity::new(ENT_GRENADE, cx, cy, vx, vy);
+                sub.fuse = 0.8;
+                self.entities.push(sub);
+            }
+        }
+
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 3.0, max_radius: 30.0,
+            speed: 2.0, life: 1.0,
+            r: 100, g: 200, b: 220,
+        });
+    }
+
+    // =====================================================================
+    // Flashbang — tiny explosion + huge white shockwave + white sparks
+    // =====================================================================
+
+    fn detonate_flashbang(&mut self, cx: f32, cy: f32) {
+        let mut rng = rand::rng();
+
+        // Tiny terrain damage
+        self.explode(cx, cy, 30.0, 0.3);
+
+        // Big white flash event
+        self.events.push(Event::new(EVT_EXPLOSION, cx, cy, 500.0));
+
+        // Two large white shockwaves
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 10.0, max_radius: 250.0,
+            speed: 7.0, life: 1.0,
+            r: 255, g: 255, b: 255,
+        });
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 5.0, max_radius: 200.0,
+            speed: 5.0, life: 1.0,
+            r: 240, g: 240, b: 255,
+        });
+
+        // White spark particles
+        for _ in 0..80 {
+            if self.particles.len() >= MAX_PARTICLES { break; }
+            let angle = rng.random_range(0.0f32..std::f32::consts::TAU);
+            let speed = rng.random_range(3.0f32..8.0);
+            self.particles.push(Particle {
+                x: cx, y: cy,
+                vx: angle.cos() * speed,
+                vy: angle.sin() * speed,
+                life: 1.0, decay: rng.random_range(0.04..0.1),
+                kind: PK_SPARK,
+                r: 255, g: 255, b: 255,
+            });
+        }
+    }
+
+    // =====================================================================
+    // Shrapnel — directional high-energy rays + debris
+    // =====================================================================
+
+    fn detonate_shrapnel(&mut self, cx: f32, cy: f32) {
+        let mut rng = rand::rng();
+
+        // 40 short, penetrating rays in random directions
+        for _ in 0..40 {
+            let angle = rng.random_range(0.0f32..std::f32::consts::TAU);
+            let dx = angle.cos();
+            let dy = angle.sin();
+            let range = rng.random_range(60.0f32..120.0);
+            let mut energy = 1.2f32;
+            let mut dist = 0.0f32;
+
+            while dist < range && energy > 0.01 {
+                dist += RAY_STEP;
+                let px = cx + dx * dist;
+                let py = cy + dy * dist;
+                let ix = px.round() as i32;
+                let iy = py.round() as i32;
+                if !Self::in_bounds(ix, iy) { break; }
+
+                let idx = Self::idx(ix as usize, iy as usize);
+                let mat = self.grid[idx].mat;
+                if mat == EMPTY { continue; }
+
+                let resistance = mat_integrity(mat);
+                if energy > resistance * 0.5 {
+                    energy -= resistance;
+                    self.grid[idx] = Cell::empty();
+                } else {
+                    break;
+                }
+            }
+        }
+
+        // Small shockwave
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 3.0, max_radius: 50.0,
+            speed: 3.0, life: 1.0,
+            r: 200, g: 80, b: 60,
+        });
+
+        self.events.push(Event::new(EVT_EXPLOSION, cx, cy, 80.0));
+
+        // Debris particles
+        for _ in 0..60 {
+            if self.particles.len() >= MAX_PARTICLES { break; }
+            let angle = rng.random_range(0.0f32..std::f32::consts::TAU);
+            let speed = rng.random_range(2.0f32..7.0);
+            self.particles.push(Particle {
+                x: cx, y: cy,
+                vx: angle.cos() * speed,
+                vy: angle.sin() * speed - 1.0,
+                life: 1.0, decay: rng.random_range(0.01..0.03),
+                kind: PK_DEBRIS,
+                r: 160, g: 140, b: 120,
+            });
+        }
+    }
+
+    // =====================================================================
+    // Incendiary — fire blanket + medium explosion
+    // =====================================================================
+
+    fn detonate_incendiary(&mut self, cx: f32, cy: f32) {
+        let mut rng = rand::rng();
+
+        // Medium explosion
+        self.explode(cx, cy, 50.0, 0.6);
+
+        self.events.push(Event::new(EVT_FIRE_IGNITED, cx, cy, 3.0));
+
+        // 500 fire pixels in 45px radius
+        for _ in 0..500 {
+            let angle = rng.random_range(0.0f32..std::f32::consts::TAU);
+            let dist = rng.random_range(0.0f32..45.0);
+            let fx = cx as i32 + (angle.cos() * dist) as i32;
+            let fy = cy as i32 + (angle.sin() * dist) as i32;
+            if !Self::in_bounds(fx, fy) { continue; }
+            let idx = Self::idx(fx as usize, fy as usize);
+            let mat = self.grid[idx].mat;
+            if mat == EMPTY || mat == LEAF || mat == WOOD {
+                self.grid[idx] = Cell {
+                    mat: FIRE,
+                    noise: rng.random_range(0u8..40),
+                    heat: 1.0,
+                    fire_ttl: rng.random_range(80..220),
+                };
+            }
+        }
+
+        // Ember particles
+        for _ in 0..80 {
+            if self.particles.len() >= MAX_PARTICLES { break; }
+            self.particles.push(Particle {
+                x: cx, y: cy,
+                vx: rng.random_range(-3.0f32..3.0),
+                vy: rng.random_range(-4.0f32..-0.5),
+                life: 1.0, decay: rng.random_range(0.01..0.03),
+                kind: PK_EMBER,
+                r: 255, g: rng.random_range(80..200), b: 20,
+            });
+        }
+
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 5.0, max_radius: 50.0,
+            speed: 3.0, life: 1.0,
+            r: 255, g: 120, b: 30,
+        });
+    }
+
+    // =====================================================================
+    // Thermobaric — massive blast + fire + pressure wave
+    // =====================================================================
+
+    fn detonate_thermobaric(&mut self, cx: f32, cy: f32) {
+        let mut rng = rand::rng();
+
+        // Massive explosion
+        self.explode(cx, cy, 250.0, 1.8);
+
+        // Fire fill in 60px radius
+        for _ in 0..400 {
+            let angle = rng.random_range(0.0f32..std::f32::consts::TAU);
+            let dist = rng.random_range(0.0f32..60.0);
+            let fx = cx as i32 + (angle.cos() * dist) as i32;
+            let fy = cy as i32 + (angle.sin() * dist) as i32;
+            if !Self::in_bounds(fx, fy) { continue; }
+            let idx = Self::idx(fx as usize, fy as usize);
+            self.grid[idx] = Cell {
+                mat: FIRE,
+                noise: rng.random_range(0u8..40),
+                heat: 1.0,
+                fire_ttl: rng.random_range(100..200),
+            };
+        }
+
+        // Pressure wave shockwaves
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 10.0, max_radius: 300.0,
+            speed: 6.0, life: 1.0,
+            r: 255, g: 200, b: 100,
+        });
+        self.shockwaves.push(ShockwaveRing {
+            cx, cy,
+            radius: 5.0, max_radius: 200.0,
+            speed: 4.0, life: 1.0,
+            r: 255, g: 100, b: 30,
+        });
+
+        // Ember cloud
+        for _ in 0..60 {
+            if self.particles.len() >= MAX_PARTICLES { break; }
+            let angle = rng.random_range(0.0f32..std::f32::consts::TAU);
+            let speed = rng.random_range(2.0f32..6.0);
+            self.particles.push(Particle {
+                x: cx, y: cy,
+                vx: angle.cos() * speed,
+                vy: angle.sin() * speed - 1.5,
+                life: 1.0, decay: rng.random_range(0.008..0.02),
+                kind: PK_EMBER,
+                r: 255, g: rng.random_range(100..200), b: 40,
+            });
+        }
     }
 
     // =====================================================================
@@ -1384,6 +1806,32 @@ impl World {
                     ((200.0 * pulse) as u8, (60.0 * pulse) as u8, (30.0 * pulse) as u8, 4i32)
                 }
                 ENT_NAPALM => (255, 160, 30, 3),
+                ENT_NUKE => {
+                    let pulse = ((tc as f32 * 0.2).sin() * 0.4 + 0.6).clamp(0.3, 1.0);
+                    ((255.0 * pulse) as u8, (255.0 * pulse) as u8, (200.0 * pulse) as u8, 5i32)
+                }
+                ENT_MIRV => {
+                    let pulse = ((tc as f32 * 0.3).sin() * 0.3 + 0.7).clamp(0.4, 1.0);
+                    ((60.0 * pulse) as u8, (200.0 * pulse) as u8, (200.0 * pulse) as u8, 3i32)
+                }
+                ENT_BUNKER_BUSTER => (180, 190, 200, 2),
+                ENT_FLASHBANG => {
+                    let pulse = ((tc as f32 * 0.5).sin() * 0.4 + 0.6).clamp(0.3, 1.0);
+                    ((255.0 * pulse) as u8, (255.0 * pulse) as u8, (255.0 * pulse) as u8, 3i32)
+                }
+                ENT_SHRAPNEL => {
+                    let pulse = ((tc as f32 * 0.25).sin() * 0.3 + 0.7).clamp(0.4, 1.0);
+                    ((180.0 * pulse) as u8, (50.0 * pulse) as u8, (50.0 * pulse) as u8, 3i32)
+                }
+                ENT_INCENDIARY => {
+                    let pulse = ((tc as f32 * 0.4).sin() * 0.5 + 0.5).clamp(0.3, 1.0);
+                    (255, (160.0 * pulse) as u8, (20.0 * pulse) as u8, 4i32)
+                }
+                ENT_THERMOBARIC => {
+                    let pulse = ((tc as f32 * 0.25).sin() * 0.3 + 0.7).clamp(0.4, 1.0);
+                    ((200.0 * pulse) as u8, (60.0 * pulse) as u8, (30.0 * pulse) as u8, 4i32)
+                }
+                ENT_LAUNCHER => (40, 200, 60, 4),
                 _ => (255, 255, 255, 2),
             };
 
@@ -1401,9 +1849,17 @@ impl World {
                 }
             }
 
-            // Crosshair indicator for placed explosives
-            if e.kind == ENT_C4 || e.kind == ENT_DYNAMITE {
-                let (cr, cg, cb) = if e.kind == ENT_C4 { (255u8, 40u8, 40u8) } else { (255, 120, 20) };
+            // Crosshair indicator for placed items
+            let needs_crosshair = matches!(e.kind,
+                ENT_C4 | ENT_DYNAMITE | ENT_INCENDIARY | ENT_LAUNCHER);
+            if needs_crosshair {
+                let (cr, cg, cb) = match e.kind {
+                    ENT_C4 => (255u8, 40u8, 40u8),
+                    ENT_DYNAMITE => (255, 120, 20),
+                    ENT_INCENDIARY => (255, 160, 30),
+                    ENT_LAUNCHER => (30, 255, 60),
+                    _ => (255, 255, 255),
+                };
                 for d in -(size + 2)..=(size + 2) {
                     for &(dx, dy) in &[(d, 0i32), (0, d)] {
                         let sx = px + dx;
