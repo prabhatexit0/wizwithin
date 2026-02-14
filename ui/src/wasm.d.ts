@@ -205,6 +205,8 @@ declare module "@blast_lab" {
     stamp_prefab(cx: number, cy: number, prefab: number): void;
     spawn_entity(kind: number, x: number, y: number, vx: number, vy: number): void;
     detonate_c4(): void;
+    fire_launchers(target_x: number, target_y: number): void;
+    clear_launchers(): void;
     tick(): void;
     render(): void;
     clear(): void;
