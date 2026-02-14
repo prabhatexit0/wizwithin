@@ -8,6 +8,7 @@ import SynthLab from "./components/SynthLab";
 import Raycaster from "./components/Raycaster";
 import EvolutionLab from "./components/EvolutionLab";
 import PhysicsLab from "./components/PhysicsLab";
+import BlastLab from "./components/BlastLab";
 
 interface MicroApp {
   slug: string;
@@ -89,6 +90,14 @@ const APPS: MicroApp[] = [
       "2D rigid-body physics — impulse collision, friction & momentum computed in Rust/WASM with touch drag-and-throw.",
     component: PhysicsLab,
     color: "#f59e0b",
+  },
+  {
+    slug: "blastlab",
+    title: "Blast Lab",
+    description:
+      "Demolition physics lab — draw structures, place explosives, and measure shockwaves, heat & radiation in Rust/WASM.",
+    component: BlastLab,
+    color: "#ef4444",
   },
 ];
 

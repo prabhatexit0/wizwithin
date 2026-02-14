@@ -3,6 +3,16 @@
 version = 4
 
 [[package]]
+name = "blast_lab"
+version = "0.1.0"
+dependencies = [
+ "getrandom",
+ "js-sys",
+ "rand",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "boid_engine"
 version = "0.1.0"
 dependencies = [

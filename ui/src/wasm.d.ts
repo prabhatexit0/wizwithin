@@ -182,6 +182,38 @@ declare module "@physics_engine" {
   }
 }
 
+declare module "@blast_lab" {
+  interface InitOutput {
+    readonly memory: WebAssembly.Memory;
+  }
+
+  export default function init(): Promise<InitOutput>;
+
+  export class World {
+    constructor();
+    free(): void;
+    width(): number;
+    height(): number;
+    pixels_ptr(): number;
+    pixels_len(): number;
+    events_ptr(): number;
+    events_len(): number;
+    events_byte_len(): number;
+    clear_events(): void;
+    entity_count(): number;
+    get_entity_data(): Float32Array;
+    stamp_prefab(cx: number, cy: number, prefab: number): void;
+    spawn_entity(kind: number, x: number, y: number, vx: number, vy: number): void;
+    detonate_c4(): void;
+    fire_launchers(target_x: number, target_y: number): void;
+    clear_launchers(): void;
+    tick(): void;
+    render(): void;
+    clear(): void;
+    cell_at(x: number, y: number): number;
+  }
+}
+
 declare module "@fractal_engine" {
   interface InitOutput {
     readonly memory: WebAssembly.Memory;
